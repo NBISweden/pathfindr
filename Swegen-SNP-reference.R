@@ -97,3 +97,34 @@ foreach(entry = file[1:10],.export = 'snps') %dopar% {
   }
 }
 
+
+## put in filehash
+load('~/Data/BTBdata/resources/SWEGEN snps/named_values.Rdata')
+names=names(values)
+names(values)=NULL
+library(filehash)
+dbCreate('myDB')
+db <- dbInit('myDB')
+p0=proc.time()[3]
+for (i in 1:1000) {
+  db[[names[i]]] <- values[i]
+  if (i %% 100==0) { 
+    p1=proc.time()[3]
+    dp=p1-p0
+    cat(date(),'average',round(100/dp), 'per second. Progress is', i,'\n')
+    p0=p1
+  }
+} # 1kps...
+
+indb=dbList(db)
+dbMultiFetch(indb)
+
+
+## in data table
+library(data.table)
+swegen_hg38_allele_counts=data.table(name=names,value=values)
+setkey(swegen_hg38_allele_counts,name)
+tables()
+save(swegen_hg38_allele_counts,file='../resources/SWEGEN snps/swegen_hg38_allele_counts.Rdata',compress = F)
+
+

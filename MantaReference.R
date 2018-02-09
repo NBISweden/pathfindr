@@ -51,9 +51,9 @@ for (file in files) {
 
 #done looping over VCFs
 save(passkeys,allkeys,file='manta_keys_2016xxx.Rdata')
-save(passkeys,allkeys,file='manta_keys_2017xxx.Rdata')
+#save(passkeys,allkeys,file='manta_keys_2017xxx.Rdata')
 
-## Local processing of dictionaries:
+## Local processing of keysets:
 setwd('~/Dropbox/BTB/resources/Manta ref files/')
 load('manta_keys_2016xxx.Rdata')
 all_2016=allkeys
@@ -64,6 +64,11 @@ pass_2017=passkeys
 # make tables
 manta_reference_all=data.frame(sort(table(c(all_2016,all_2017)),decreasing = T),stringsAsFactors = F)
 manta_reference_pass=data.frame(sort(table(c(pass_2016,pass_2017)),decreasing = T),stringsAsFactors = F)
-save(manta_reference_pass,manta_reference_all,file='manta_reference_180205.Rdata')
+colnames(manta_reference_all) <- colnames(manta_reference_pass) <- c('name','value')
+btb_hg38_manta_all <- data.table(manta_reference_all)
+setkey(swegen_hg38_manta_all,name)
+btb_hg38_manta_pass <- data.table(manta_reference_pass)
+setkey(btb_hg38_manta_pass,name)
+save(btb_hg38_manta_all,btb_hg38_manta_pass,file='BTB_hg38_manta_counts.Rdata')
 
 
