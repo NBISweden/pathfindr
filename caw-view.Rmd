@@ -20,47 +20,45 @@ knitr::opts_chunk$set(echo = FALSE,comment = '',warning=F,error = F)
 <!-- Dependencies and reference data -->
 ```{r,echo=F, include=F}
 library(data.table)
-library(readr)
-library(dplyr)
-library(tidyr)
-library(tibble)
-library(purrr)
+# library(readr)
+# library(dplyr)
+# library(tidyr)
+# library(tibble)
+# library(purrr)
 library(ggplot2)
 theme_set(theme_light())
 library(ggrepel)
 library(VariantAnnotation)
-library(gridExtra)
+#library(gridExtra)
 library(VennDiagram)
 
-load('~/reports/BTB_hg38_manta_counts.Rdata') # gets btb_hg38_manta_all/_pass
 load('~/reports/swegen_hg38_allele_counts.Rdata') # gets swegen_hg38_allele_counts
+load('~/reports/mutations_genes_ref.Rdata') # gets cosmic,msk,oncokb
+load('~/reports/BTB_hg38_manta_counts.Rdata') # gets btb_hg38_manta_all/_pass
 
-chrsz <- data.table(
-  chr = c("1", "2", "3", "4", "5", "6", "7", "8", 
-          "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", 
-          "20", "21", "22", "X", "Y"), 
-  starts = c(0, 253902921, 500669562, 
-             703689723, 898025604, 1084280925, 1259870526, 1424144247, 1574191848, 
-             1717288929, 1855896810, 1995944331, 2134165212, 2253485013, 2363996694, 
-             2470839615, 2565902256, 2654091777, 2739309138, 2802869979, 2871941700, 
-             2923598421, 2979326382, 3140008743), 
-  length = c(248902921, 241766641, 
-             198020161, 189335881, 181255321, 170589601, 159273721, 145047601, 
-             138097081, 133607881, 135047521, 133220881, 114319801, 105511681, 
-             101842921, 90062641, 83189521, 80217361, 58560841, 64071721, 
-             46656721, 50727961, 155682361, 56827081)
-  )
 
+listfix <- function(list) {
+  l=lapply(list,length)
+  for (i in which(l!=1)) list[[i]]=0
+  unlist(list)
+}
 
 ```
 
 #### Directory/Sample
 <!-- First, make a list of files to read and visualize -->
 ```{r}
-cat(date(),'\n')
+cat(date <- date(),'\n')
 cat('Current directory:', getwd(),'\n')
 
 files <- dir(recursive = T,full.names = T)
+
+sampleData <- data.table(
+  date=date,
+  directory=getwd(),
+  name=basename(getwd())
+)
+
 files <- files[-grep(pattern = '.png',x = files)]
 # control freec files
 freec_Tratio_file <- files[grep(pattern = 'T.hg38.pileup.gz_ratio.txt',files)]
@@ -68,6 +66,7 @@ freec_Nratio_file <- files[grep(pattern = 'T.hg38.pileup.gz_normal_ratio.txt',fi
 freec_Tbaf_file <- files[grep(pattern = 'T.hg38.pileup.gz_BAF.txt',files)]
 freec_Nbaf_file <- files[grep(pattern = 'B.hg38.pileup.gz_BAF.txt',files)]
 freec_info_file <- files[grep(pattern = 'hg38.pileup.gz_info.txt',files)]
+freec_cnv_file <- files[grep(pattern = glob2rx('*T.hg38.pileup.gz_CNVs'),files)]
 # Ascat files
 ascat_Tratio_file <- files[grep(pattern = glob2rx("*Ascat*T.LogR"),files)]
 ascat_Nratio_file <- files[grep(pattern = glob2rx("*Ascat*N.LogR"),files)]
@@ -176,6 +175,43 @@ if (length(freec_Tratio_file)>0 &
     }
     binned <- rbind(binned,temp)
   }
+  
+  # make CNA burden estimate from binned:
+  sampleData[['Control_Freec_CNA_burden']] <- round(binned[chr %in% 1:22,sum(abs(tratio-median(tratio))>0.1,na.rm = T)/.N]*100)
+  
+  # check which regions are worth reporting
+  # cnv file
+  cnvs <- fread(freec_cnv_file)
+  names(cnvs) <- c('chr','start','end','copies','effect','genotype','value','type','na')
+  cnvs$Gene_Tier <- 3
+  cnvs$Effect_Tier <- 3
+  cnvs$cosmic_genes <- ''
+  cnvs$all_genes=''
+  # amplifications/duplications max 5MB, homdel max 3MB
+  cnvs <- cnvs[(end-start < 5e6 & effect=='gain') | (end-start < 3e6 & copies==0)]
+  # add genes 
+  for (i in 1:nrow(cnvs)) {
+    all=allgenes[chr==cnvs$chr[i] & start<cnvs$end[i] & end>cnvs$end[i],name]
+    if (length(all)>0) { # if any genes in cnv
+      cnvs$all_genes[i]=paste(all,collapse = ' ') # put in table
+      t2=all[(all %in% tumorgenes$`Gene Symbol`)] 
+      if (length(t2)>0) { # if any in cosmic
+        cnvs$cosmic_genes[i] <- paste(t2,collapse = ' ') # put in table
+        cnvs$Gene_Tier[i]=2
+        cnvs$Effect_Tier[i]=2
+        # if the effect is TSG loss or oncogene amp, Tier 1
+        if (cnvs$copies[i]==0) if (any(all %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`]))
+          cnvs$Effect_Tier[i]=1
+        if (cnvs$effect[i]=='gain') if (any(all %in% tumorgenes[grep('oncogene',`Role in Cancer`),`Gene Symbol`]))
+          cnvs$Effect_Tier[i]=1
+      }
+      t1=all[(all %in% tumorgenes[Tier==1,`Gene Symbol`])] 
+      if (length(t1)>0) { # if any in cosmic T1
+        cnvs$Gene_Tier[i]=1
+      }
+    }
+  }
+  
 }
 ```
 
@@ -191,10 +227,9 @@ if (exists('tratio')) {
   temp <- tratio
   temp$Ratio[temp$Ratio>3]=3
 
-  g=ggplot()+ylab('B allele ratio and Coverage Ratio')
+  g=ggplot()+ylab('B allele ratio and Coverage Ratio')+
     scale_color_gradientn(colours = c('violet','blue','black','red','orange'))+
     ylim(-1,3)+
-    #expand_limits(y=c(-1,1.6))+
     expand_limits(x=c(0,3200e6))
   # normal logR below
   g=g+geom_point(aes(x=cumstart,y=Ratio-0.3),col='darkgrey',data=nratio,alpha=1/5,shape='.')
@@ -260,7 +295,6 @@ if (length(ascat_Tratio_file)>0 &
   
   # manipulate for plot:
   ascat_tratio$cumstart=ascat_tratio$Position
-  #ascat_nratio$cumstart=ascat_nratio$Position
   ascat_tbaf$cumstart=ascat_tbaf$Position
   ascat_nbaf$cumstart=ascat_nbaf$Position
   ascat_cnv$cumstart=ascat_cnv$startpos
@@ -280,7 +314,6 @@ if (length(ascat_Tratio_file)>0 &
   }
   # copy number hack
   ascat_tratio$Ratio=2^ascat_tratio$LogR
-  #ascat_tratio$Ratio[ascat_tratio$Ratio > 2]=2
   ascat_tratio$smoothed=runmed(x = ascat_tratio$Ratio,k = 99)
   ascat_tratio$CopyNumber=2
   ascat_tratio$MinorCopy=1
@@ -322,6 +355,8 @@ if (length(ascat_Tratio_file)>0 &
     }
     ascat_binned=rbind(ascat_binned,temp)
   }
+  # make CNA burden estimate from binned
+  sampleData[['Ascat_CNA_burden']] <- round(ascat_binned[chr %in% 1:22,sum(abs(tratio-median(tratio))>0.1,na.rm = T)/.N]*100)
 }
 ```
 
@@ -334,7 +369,7 @@ if (exists('ascat_tratio')) {
   par(mai=c(0,4,0,2))
   temp <- ascat_tratio
   temp$smoothed[temp$smoothed>3]=3
-  g=ggplot()
+  g=ggplot()+
     scale_color_gradientn(colours = c('violet','blue','black','red','orange'))+
     ylim(-1,3)+
     expand_limits(x=c(0,3200e6))
@@ -417,7 +452,8 @@ if (length(vep_Tstruct_file)>0) {
   rr=rowRanges(tstruc_vcf)
   
   # manipulate into a data frame with relevant data, "info"" annotations also need to be added
-  tstruc=cbind(data.table(THISID=names(rr)),as.data.table(rr),as.data.table(inf))
+  tstruc=cbind(data.table(THISID=names(rr)),as.data.table(rr),as.data.table(inf))[FILTER=='PASS' & IMPRECISE==F,]
+  tstruc$SVLEN=listfix(tstruc$SVLEN)
   setkey(x = tstruc,THISID)
   tstruc$chr <- substr(x = tstruc$seqnames,start = 4,stop = 6)
   tstruc$cumstart=tstruc$start
@@ -426,6 +462,29 @@ if (length(vep_Tstruct_file)>0) {
   tstruc$altpos=tstruc$END
   tstruc$plot=F
   tstruc$arc= -1
+  
+  
+  # Filter out variants seen 2+ (?) times in reference data
+  ## Key has only chr,start,end
+  key=tstruc[,c('chr','start','end')]
+  key$imprecise='(pr)'
+  ## If imprecise, round the pos to 10
+  ix=tstruc$IMPRECISE==T
+  key$imprecise[ix]='(impr)'
+  key$start[ix]=round(key$start[ix]/10)*10
+  key$end[ix]=round(key$end[ix]/10)*10
+  key=paste(key$chr,key$start,key$end,key$imprecise)
+  ## which keys are in reference?
+  ix=key %in% btb_hg38_manta_pass$name # 11357. (why not all? this sample is in the reference.........)
+  ix=btb_hg38_manta_pass$name %in% key # all but 800 ≥2 obs
+  ix=key %in% btb_hg38_manta_all$name # 12559,
+  ix=btb_hg38_manta_all$name %in% key #  all but 799 ≥2 obs
+  # thus 1,5k reamins using "all" and 2,5k remains using "pass".
+  # now using 2 observations as cutoff 
+  ix <- key %in% btb_hg38_manta_all[value>1]$name
+  ## do the filter
+  tstruc <- tstruc[!ix]
+  
   # loop through all and extract endpoint chr and pos
   for (i in 1:nrow(tstruc)) {
     t=strsplit(x = tstruc$ALT[[i]],split = ':')[[1]]
@@ -439,7 +498,10 @@ if (length(vep_Tstruct_file)>0) {
       tstruc$plot[i]=T
       tstruc$arc[i]=1
     } else {
-      if (tstruc[tstruc$MATEID[i][[1]],'plot']==F) tstruc$plot[i]=T # if mate not being plotted, plot this one
+      tstruc$plot[i]=T
+      try({
+        if (tstruc[tstruc$MATEID[i][[1]],'plot']==T) tstruc$plot[i]=F # if mate not being plotted, plot this one
+      }, silent=T)
     }
   }
   # # for each chr get cumulative pos
@@ -451,42 +513,148 @@ if (length(vep_Tstruct_file)>0) {
     ix=tstruc$altchr==chrsz$chr[i]
     tstruc$altcumpos[ix]=tstruc$altpos[ix]+chrsz$starts[i]
   }
-  # Before looking at consequences, filter out variants seen 2+ (?) times in reference data
-  ## Key has only chr,start,end
-  key=tstruc[,c('chr','start','end')]
-  key$imprecise='(pr)'
-  ## If imprecise, round the pos to 10
-  ix=inf$IMPRECISE==T
-  key$imprecise[ix]='(impr)'
-  key$start[ix]=round(key$start[ix]/10)*10
-  key$end[ix]=round(key$end[ix]/10)*10
-  key=paste(key$chr,key$start,key$end,key$imprecise)
-  ## which keys are in reference?
-  ix=key %in% btb_hg38_manta_pass$name # 6 only, 
-  ix=btb_hg38_manta_pass$name %in% key # all once only
-  ix=key %in% btb_hg38_manta_all$name # 8 only,
-  ix=btb_hg38_manta_all$name %in% key #  4 with ≥2 obs
-  # need for filter is marginal!
-  # now using 2 observations as cutoff 
-  ix <- key %in% btb_hg38_manta_all[value>1]$name
-  ## do the filter
-  tstruc <- tstruc[!ix]
   
-  # much annotation is in the CSQ column. get Symbol and Consequence for now.
-  tstruc$symbol=''
-  tstruc$consequence=''
+
+  
+
+  # annotation is in the CSQ column.
   h=strsplit(info(header(tstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
-  h=strsplit(h,'\\|')[[1]]
-  for (i in 1:length(tstruc$CSQ)) { # for each variant
-    symbol=NULL
-    consequence=NULL
-    for (j in 1:length(tstruc$CSQ[[i]])) { # for each annotated transcript
-      symbol=c(symbol,strsplit(tstruc$CSQ[[i]][j],'\\|')[[1]][h=='SYMBOL'])
-      consequence=c(consequence,strsplit(tstruc$CSQ[[i]][j],'\\|')[[1]][h=='Consequence'])
+  vep_header=strsplit(h,'\\|')[[1]]
+  
+  # VEP annotation is put in annotation_table
+  annotation_table=matrix(data = NA,nrow = length(unlist(tstruc$CSQ)),ncol = length(vep_header)+1)
+  colnames(annotation_table)=c('N',vep_header)
+  row=1
+  for (i in 1:nrow(tstruc)) { # for each variant
+    # for each VEP annotation:
+    for (j in 1:length(tstruc$CSQ[[i]])) { 
+      line=strsplit(tstruc$CSQ[[i]][j],'\\|')[[1]]
+      annotation_table[row,1]=i
+      annotation_table[row,1+(1:length(line))]=line
+      row=row+1
     }
-    tstruc$symbol[i]=paste(unique(symbol),collapse=',')
-    tstruc$consequence[i]=paste(unique(consequence),collapse=',')
   }
+  annotation_table=as.data.table(annotation_table)
+  
+  # Add to data
+  tstruc$N=as.character(1:nrow(tstruc))
+  manta_tumor_table <- merge(tstruc,annotation_table,by='N')[order(cumstart),-1]
+  #manta_tumor_table <- manta_tumor_table[,-c('Feature','EXON','Protein_position','BIOTYPE')]
+  
+  # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
+  del_ok <- which(manta_tumor_table$SVTYPE=='DEL' & abs(manta_tumor_table$SVLEN)<3e6)
+  # Amplification: consider <5M for amplification consequence, report census genes
+  amp_ok <- which(manta_tumor_table$SVTYPE=='DUP' & abs(manta_tumor_table$SVLEN)<5e6)
+  # Fusions/disrupting: Do the SVs start/end at gene? 
+  manta_tumor_table$Starts_Near <- ''
+  manta_tumor_table$Ends_Near <- ''
+  manta_tumor_table$Junction <- ''
+  cumstart=allgenes$cumstart
+  cumend=allgenes$cumend
+  for (i in 1:nrow(manta_tumor_table)) {
+      i=as.integer(i)
+      #cat(i,'\n')
+      g=manta_tumor_table$SYMBOL[i]
+      # genes overlapping SV start
+      t=manta_tumor_table$cumstart[i]
+      ix=cumstart-10e3 < t & cumend +10e3 > t
+      if (length(ix)>0) {
+        genes=allgenes[ix,unique(name)]
+        set(manta_tumor_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
+        if (g %in% genes) set(manta_tumor_table,i,'Junction',value='Y')
+      }
+      # genes overlapping SV end
+      t=manta_tumor_table$altcumpos[i]
+      ix=cumstart-10e3 < t & cumend +10e3 > t
+      if (length(ix)>0) {
+        genes=allgenes[ix,unique(name)]
+        set(manta_tumor_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
+        if (g %in% genes) set(manta_tumor_table,i,'Junction',value='Y')
+      }
+  }
+  # Inside genes: Junctions may be putative fusion or knock-out if either end is "this" gene.
+  afflicted_ok <- which(manta_tumor_table$Junction=='Y')
+  
+  ## Make new table with predicted effects
+  selection <- unique(
+    manta_tumor_table[unique(sort(c(del_ok, amp_ok, afflicted_ok))),
+                                 .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
+                                   REF,altpos,ALT=unlist(ALT),SYMBOL,Consequence,Starts_Near,Ends_Near)]
+  )
+  selection$Gene_Tier <- 3
+  selection$Effect_Tier <- 3
+  selection$Comment=''
+  selection$LOH <- ''
+  
+  # Set gene tier to 1,2 based on Cosmic
+  selection[SYMBOL %in% tumorgenes$`Gene Symbol` | SYMBOL %in% local_tumorgenes$V1]$Gene_Tier <- 2
+  selection[SYMBOL %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
+  selection <- selection[order(Gene_Tier)]
+  
+  # Set Effect tiers: 
+  for (i in selection[Gene_Tier<3,.I]) {
+    symbol=selection$SYMBOL[i]
+    starts_at=selection$Starts_Near[i]
+    ends_at=selection$Ends_Near[i]
+    length=abs(selection$SVLEN[i])
+    gene=tumorgenes[`Gene Symbol`==symbol,] # this gene from Cosmic table
+    # first fusions/translocations
+    g=grep('fusion',gene$`Role in Cancer`)
+    if (length(g)>0) { # fusion gene yes
+      if (symbol %in% c(starts_at,ends_at)) { # and the start or end is at this (SYMBOL) gene
+        # now 1 if perfect match with Cosmic, 2 if partial match
+        mates=strsplit(gene$`Translocation Partner`,', ')[[1]] # this gene's common tx mates
+        if (starts_at != ends_at) { # if this symbol is either start or end, not both
+          if (starts_at %in% mates | ends_at %in% mates) { # and either is a member of known fusion mates
+            selection$Effect_Tier[i]=1 # common translocation/fusion
+            selection$Comment[i]=paste(selection$Comment[i],'known_fusion')
+          } else {
+            selection$Effect_Tier[i]=2 # then at least tier 2
+            selection$Comment[i]=paste0(selection$Comment[i],'partial_known_fusion')
+          }
+        }
+      }
+    }
+    # then deletions
+    if (selection$SVTYPE[i]=='DEL' & length<3e6) {
+      g=grep('TSG',gene$`Role in Cancer`)
+      if (length(g)>0) { # Tumor supressor gene yes
+        selection$Effect_Tier[i]=1
+        selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
+      } else { # else 2 unless already one
+        selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+        selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
+      }
+    }
+    # then amplifications
+    if (selection$SVTYPE[i]=='DUP' & length<5e6) {
+      g=grep('oncogene',gene$`Role in Cancer`)
+      if (length(g)>0) { # Oncogene yes
+        selection$Effect_Tier[i]=1
+        selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
+      } else {
+        selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+        selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
+      }
+    }
+    # last other disruptions
+    if (symbol %in% c(starts_at,ends_at)) { # if the start or end is at this (SYMBOL) gene
+      selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2) # some indication of effect!
+      selection$Comment[i]=paste(selection$Comment[i],'at_breakpoint')
+    }
+  }
+  
+  # Add ASCAT LOH.
+  for (i in 1:nrow(selection)) {
+    ix=ascat_cnv$chr==selection$chr[i] &
+      ascat_cnv$startpos<selection$start[i] &
+      ascat_cnv$endpos>selection$end[i]
+    if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
+  }
+  selection <- selection[order(Effect_Tier,Gene_Tier)]
+
+  manta_tumor_selected <- selection
+  
 }
 ```
 
@@ -500,7 +668,8 @@ if (length(vep_Nstruct_file)>0) {
   rr=rowRanges(nstruc_vcf)
   
   # manipulate into a data frame with relevant data, "info"" annotations also need to be added
-  nstruc=cbind(data.table(THISID=names(rr)),as.data.table(rr),as.data.table(inf))
+  nstruc=cbind(data.table(THISID=names(rr)),as.data.table(rr),as.data.table(inf))[FILTER=='PASS' & IMPRECISE==FALSE]
+  nstruc$SVLEN=listfix(nstruc$SVLEN)
   setkey(x = nstruc,THISID)
   nstruc$chr <- substr(x = nstruc$seqnames,start = 4,stop = 6)
   nstruc$cumstart=nstruc$start
@@ -509,37 +678,13 @@ if (length(vep_Nstruct_file)>0) {
   nstruc$altpos=nstruc$END
   nstruc$plot=F
   nstruc$arc= -1
-  # loop through all and extract endpoint chr and pos
-  for (i in 1:nrow(nstruc)) {
-    t=strsplit(x = nstruc$ALT[[i]],split = ':')[[1]]
-    if (length(t)>1 & t[1]!="<DUP") {
-      nstruc$altchr[i]=strsplit(x = t[1],split = 'chr')[[1]][2]
-      tt=strsplit(t[2],'\\[')[[1]][1]; tt=strsplit(tt[1],'\\]')[[1]][1]
-      nstruc$altpos[i]=as.numeric(tt)
-    }
-    # also decide how it is to be plotted (not represented elsewhere, up or down arc)
-    if (nstruc$chr[i]==nstruc$altchr[i]) {
-      nstruc$plot[i]=T
-      nstruc$arc[i]=1
-    } else {
-      if (nstruc[nstruc$MATEID[i][[1]],'plot']==F) nstruc$plot[i]=T # if mate not being plotted, plot this one
-    }
-  }
-  # # for each chr get cumulative pos
-  nstruc$altcumpos=nstruc$altpos
-  for (i in 1:nrow(chrsz)) {
-    ix=nstruc$chr==chrsz$chr[i]
-    nstruc$cumstart[ix]=nstruc$start[ix]+chrsz$starts[i]
-    nstruc$cumend[ix]=nstruc$end[ix]+chrsz$starts[i]
-    ix=nstruc$altchr==chrsz$chr[i]
-    nstruc$altcumpos[ix]=nstruc$altpos[ix]+chrsz$starts[i]
-  }
-  # Before looking at consequences, filter out variants seen 2+ (?) times in reference data
+  
+  # Filter out variants seen 2+ (?) times in reference data
   ## Key has only chr,start,end
   key=nstruc[,c('chr','start','end')]
   key$imprecise='(pr)'
   ## If imprecise, round the pos to 10
-  ix=inf$IMPRECISE==T
+  ix=nstruc$IMPRECISE==T
   key$imprecise[ix]='(impr)'
   key$start[ix]=round(key$start[ix]/10)*10
   key$end[ix]=round(key$end[ix]/10)*10
@@ -554,23 +699,178 @@ if (length(vep_Nstruct_file)>0) {
   ix <- key %in% btb_hg38_manta_all[value>1]$name
   ## do the filter
   nstruc <- nstruc[!ix]
-
-  # much annotation is in the CSQ column. get Symbol and Consequence for now.
-  nstruc$symbol=''
-  nstruc$consequence=''
-  h=strsplit(info(header(nstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
-  h=strsplit(h,'\\|')[[1]]
-  for (i in 1:length(nstruc$CSQ)) { # for each variant
-    symbol=NULL
-    consequence=NULL
-    for (j in 1:length(nstruc$CSQ[[i]])) { # for each annotated transcript
-      symbol=c(symbol,strsplit(nstruc$CSQ[[i]][j],'\\|')[[1]][h=='SYMBOL'])
-      consequence=c(consequence,strsplit(nstruc$CSQ[[i]][j],'\\|')[[1]][h=='Consequence'])
+  
+  # loop through all and extract endpoint chr and pos
+  for (i in 1:nrow(nstruc)) {
+    t=strsplit(x = nstruc$ALT[[i]],split = ':')[[1]]
+    if (length(t)>1 & t[1]!="<DUP") {
+      nstruc$altchr[i]=strsplit(x = t[1],split = 'chr')[[1]][2]
+      tt=strsplit(t[2],'\\[')[[1]][1]; tt=strsplit(tt[1],'\\]')[[1]][1]
+      nstruc$altpos[i]=as.numeric(tt)
     }
-    nstruc$symbol[i]=paste(unique(symbol),collapse=',')
-    nstruc$consequence[i]=paste(unique(consequence),collapse=',')
+    # also decide how it is to be plotted (not represented elsewhere, up or down arc)
+    if (nstruc$chr[i]==nstruc$altchr[i]) {
+      nstruc$plot[i]=T
+      nstruc$arc[i]=1
+    } else {
+      nstruc$plot[i]=T
+      try({
+        if (nstruc[nstruc$MATEID[i][[1]],'plot']==T) nstruc$plot[i]=F # if mate not being plotted, plot this one
+      }, silent=T)
+    }
   }
+  # # for each chr get cumulative pos
+  nstruc$altcumpos=nstruc$altpos
+  for (i in 1:nrow(chrsz)) {
+    ix=nstruc$chr==chrsz$chr[i]
+    nstruc$cumstart[ix]=nstruc$start[ix]+chrsz$starts[i]
+    nstruc$cumend[ix]=nstruc$end[ix]+chrsz$starts[i]
+    ix=nstruc$altchr==chrsz$chr[i]
+    nstruc$altcumpos[ix]=nstruc$altpos[ix]+chrsz$starts[i]
+  }
+  
+
+  
+  # annotation is in the CSQ column.
+  h=strsplit(info(header(nstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
+  vep_header=strsplit(h,'\\|')[[1]]
+  
+  # VEP annotation is put in annotation_table
+  annotation_table=matrix(data = NA,nrow = length(unlist(nstruc$CSQ)),ncol = length(vep_header)+1)
+  colnames(annotation_table)=c('N',vep_header)
+  row=1
+  for (i in 1:nrow(nstruc)) { # for each variant
+    # for each VEP annotation:
+    for (j in 1:length(nstruc$CSQ[[i]])) { 
+      line=strsplit(nstruc$CSQ[[i]][j],'\\|')[[1]]
+      annotation_table[row,1]=i
+      annotation_table[row,1+(1:length(line))]=line
+      row=row+1
+    }
+  }
+  annotation_table=as.data.table(annotation_table)
+  
+  # Add to data
+  nstruc$N=as.character(1:nrow(nstruc))
+  manta_normal_table <- merge(nstruc,annotation_table,by='N')[order(cumstart),-1]
+
+  # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
+  del_ok <- which(manta_normal_table$SVTYPE=='DEL' & abs(manta_normal_table$SVLEN)<3e6)
+  # Amplification: consider <5M for amplification consequence, report census genes
+  amp_ok <- which(manta_normal_table$SVTYPE=='DUP' & abs(manta_normal_table$SVLEN)<5e6)
+  # Fusions/disrupting: Do the SVs start/end at gene? 
+  manta_normal_table$Starts_Near <- ''
+  manta_normal_table$Ends_Near <- ''
+  manta_normal_table$Junction <- ''
+  cumstart=allgenes$cumstart
+  cumend=allgenes$cumend
+  for (i in 1:nrow(manta_normal_table)) {
+      i=as.integer(i)
+      #cat(i,'\n')
+      g=manta_normal_table$SYMBOL[i]
+      # genes overlapping SV start
+      t=manta_normal_table$cumstart[i]
+      ix=cumstart-10e3 < t & cumend +10e3 > t
+      if (length(ix)>0) {
+        genes=allgenes[ix,unique(name)]
+        set(manta_normal_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
+        if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
+      }
+      # genes overlapping SV end
+      t=manta_normal_table$altcumpos[i]
+      ix=cumstart-10e3 < t & cumend +10e3 > t
+      if (length(ix)>0) {
+        genes=allgenes[ix,unique(name)]
+        set(manta_normal_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
+        if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
+      }
+  }
+  # Inside genes: Junctions may be putative fusion or knock-out if either end is "this" gene.
+  afflicted_ok <- which(manta_normal_table$Junction=='Y')
+  
+  ## Make new table with predicted effects
+  selection <- unique(
+    manta_normal_table[unique(sort(c(del_ok, amp_ok, afflicted_ok))),
+                                 .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
+                                   REF,altpos,ALT=unlist(ALT),SYMBOL,Consequence,Starts_Near,Ends_Near)]
+  )
+  selection$Gene_Tier <- 3
+  selection$Effect_Tier <- 3
+  selection$Comment=''
+  selection$LOH <- ''
+  
+  # Set gene tier to 1,2 based on Cosmic
+  selection[SYMBOL %in% tumorgenes$`Gene Symbol` | SYMBOL %in% local_tumorgenes$V1]$Gene_Tier <- 2
+  selection[SYMBOL %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
+  selection <- selection[order(Gene_Tier)]
+  
+  # Set Effect tiers: 
+  for (i in selection[Gene_Tier<3,.I]) {
+    symbol=selection$SYMBOL[i]
+    starts_at=selection$Starts_Near[i]
+    ends_at=selection$Ends_Near[i]
+    length=abs(selection$SVLEN[i])
+    gene=tumorgenes[`Gene Symbol`==symbol,] # this gene from Cosmic table
+    # first fusions/translocations
+    g=grep('fusion',gene$`Role in Cancer`)
+    if (length(g)>0) { # fusion gene yes
+      if (symbol %in% c(starts_at,ends_at)) { # and the start or end is at this (SYMBOL) gene
+        # now 1 if perfect match with Cosmic, 2 if partial match
+        mates=strsplit(gene$`Translocation Partner`,', ')[[1]] # this gene's common tx mates
+        if (starts_at != ends_at) { # if this symbol is either start or end, not both
+          if (starts_at %in% mates | ends_at %in% mates) { # and either is a member of known fusion mates
+            selection$Effect_Tier[i]=1 # common translocation/fusion
+            selection$Comment[i]=paste(selection$Comment[i],'known_fusion')
+          } else {
+            selection$Effect_Tier[i]=2 # then at least tier 2
+            selection$Comment[i]=paste0(selection$Comment[i],'partial_known_fusion')
+          }
+        }
+      }
+    }
+    # then deletions
+    if (selection$SVTYPE[i]=='DEL' & length<3e6) {
+      g=grep('TSG',gene$`Role in Cancer`)
+      if (length(g)>0) { # Tumor supressor gene yes
+        selection$Effect_Tier[i]=1
+        selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
+      } else { # else 2 unless already one
+        selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+        selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
+      }
+    }
+    # then amplifications
+    if (selection$SVTYPE[i]=='DUP' & length<5e6) {
+      g=grep('oncogene',gene$`Role in Cancer`)
+      if (length(g)>0) { # Oncogene yes
+        selection$Effect_Tier[i]=1
+        selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
+      } else {
+        selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+        selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
+      }
+    }
+    # last other disruptions
+    if (symbol %in% c(starts_at,ends_at)) { # if the start or end is at this (SYMBOL) gene
+      selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2) # some indication of effect!
+      selection$Comment[i]=paste(selection$Comment[i],'at_breakpoint')
+    }
+  }
+  
+  # Add ASCAT LOH.
+  for (i in 1:nrow(selection)) {
+    ix=ascat_cnv$chr==selection$chr[i] &
+      ascat_cnv$startpos<selection$start[i] &
+      ascat_cnv$endpos>selection$end[i]
+    if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
+  }
+  selection <- selection[order(Effect_Tier,Gene_Tier)]
+  
+  manta_normal_selected <- selection
+  
 }
+
+
 ```
 
 &nbsp;
@@ -705,6 +1005,20 @@ if (length(mutect2_file)>0) {
   vep_header=strsplit(info(header(vcf))['CSQ',][,3],'Format: ')[[1]][2]
   vep_header=strsplit(vep_header,'\\|')[[1]]
   
+  
+    # keep only PASS
+  tmuts=tmuts[filter=='PASS',]
+  
+     ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
+  # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
+  key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
+  key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
+  key1_refAF[is.na(value),1]=0
+  tmuts$allele1_swegen_count=key1_refAF$value
+  remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
+  tmuts <- tmuts[!remove,] # filtered.
+
+  
   # VEP annotation is put in annotation_table
   annotation_table=matrix(data = NA,nrow = nrow(tmuts),ncol = length(vep_header))
   colnames(annotation_table)=vep_header
@@ -718,6 +1032,48 @@ if (length(mutect2_file)>0) {
   
   # Annotation table then concatenated 
   mutect2_table=cbind(tmuts,annotation_table)
+  
+  # Keep high/mod-relevance in final output
+  impact=which(mutect2_table$IMPACT %in% c('HIGH','MODERATE'))
+  # Also keep Clinvar-pathogenic
+  clinvar_pathogenic=grep('pathogenic',mutect2_table$CLIN_SIG)
+  # And PolyPhen-damaging
+  polyphen_damaging=grep('damaging',mutect2_table$PolyPhen)
+  # And SIFT-deleterious
+  sift_deleterious=grep('deleterious',mutect2_table$SIFT)
+
+  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious)))
+  selection <- mutect2_table[
+    keep,
+    .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+      ref,alt,DP,AD,DPn,ADn,allele1_swegen_count,Gene_Tier=3,Effect_Tier=3)
+    ]
+  if (nrow(selection)>0) {
+    for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    
+    # Genes in census or local list considered T2, census Tier1 then gets T1
+    selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
+    selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
+    
+    # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
+    selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
+    temp=paste(selection$SYMBOL,selection$Protein_position)
+    is_hotspot_pos <- 
+      temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
+      temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
+    selection[is_hotspot_pos | (IMPACT=='HIGH' &
+                                  selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
+    selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
+    
+    # Add ASCAT LOH.
+    for (i in 1:nrow(selection)) {
+      ix=ascat_cnv$chr==selection$chr[i] &
+        ascat_cnv$startpos<selection$start[i] &
+        ascat_cnv$endpos>selection$end[i]
+      if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
+    }
+  }
+  mutect2_selected <- selection
 }
 ```
 &nbsp;
@@ -793,8 +1149,8 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
     ix=tmuts$chr==chrsz$chr[i]
     tmuts$cumstart[ix]=tmuts$start[ix]+chrsz$starts[i]
     tmuts$cumend[ix]=tmuts$end[ix]+chrsz$starts[i]
-    ix=tmuts$altchr==chrsz$chr[i]
-    tmuts$altcumpos[ix]=tmuts$altpos[ix]+chrsz$starts[i]
+    # ix=tmuts$altchr==chrsz$chr[i]
+    # tmuts$altcumpos[ix]=tmuts$altpos[ix]+chrsz$starts[i]
   }
   tmuts$DPt=g$DP[,2]
   tmuts$DPn=g$DP[,1]
@@ -810,6 +1166,16 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # keep only PASS
   tmuts=tmuts[filter=='PASS',]
   
+   ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
+  # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
+  key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
+  key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
+  key1_refAF[is.na(value),1]=0
+  tmuts$allele1_swegen_count=key1_refAF$value
+  remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
+  tmuts <- tmuts[!remove,] # filtered.
+
+  
   # VEP annotation is put in annotation_table
   annotation_table=matrix(data = NA,nrow = nrow(tmuts),ncol = length(vep_header))
   colnames(annotation_table)=vep_header
@@ -824,6 +1190,52 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # Annotation table then concatenated 
   strelka_snvs=cbind(tmuts,annotation_table)
 
+  
+    # Keep high/mod-relevance in final output
+  impact=which(strelka_snvs$IMPACT %in% c('HIGH','MODERATE'))
+  # Also keep Clinvar-pathogenic
+  clinvar_pathogenic=grep('pathogenic',strelka_snvs$CLIN_SIG)
+  # And PolyPhen-damaging
+  polyphen_damaging=grep('damaging',strelka_snvs$PolyPhen)
+  # And SIFT-deleterious
+  sift_deleterious=grep('deleterious',strelka_snvs$SIFT)
+
+  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious)))
+  selection <- strelka_snvs[
+    keep,
+    .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+      ref,alt,DP=DPt,DPn,allele1_swegen_count,Gene_Tier=3,Effect_Tier=3)
+    ]
+  if (nrow(selection)>0) {
+    for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    
+    # Genes in census or local list considered T2, census Tier1 then gets T1
+    selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
+    selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
+    
+    # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
+    selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
+    temp=paste(selection$SYMBOL,selection$Protein_position)
+    is_hotspot_pos <- 
+      temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
+      temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
+    selection[is_hotspot_pos | (IMPACT=='HIGH' &
+                                  selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
+    selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
+    
+    # Add ASCAT LOH.
+    for (i in 1:nrow(selection)) {
+      ix=ascat_cnv$chr==selection$chr[i] &
+        ascat_cnv$startpos<selection$start[i] &
+        ascat_cnv$endpos>selection$end[i]
+      if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
+    }
+  }
+  strelka_selected <- selection
+  
+  # indels are read and added below.
+  
+  
   ## Read Strelka indels
   vcf=readVcf(file = strelka_indel_file,genome ='GRCh38')
   g=geno(vcf)
@@ -852,8 +1264,6 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
     ix=tmuts$chr==chrsz$chr[i]
     tmuts$cumstart[ix]=tmuts$start[ix]+chrsz$starts[i]
     tmuts$cumend[ix]=tmuts$end[ix]+chrsz$starts[i]
-    ix=tmuts$altchr==chrsz$chr[i]
-    tmuts$altcumpos[ix]=tmuts$altpos[ix]+chrsz$starts[i]
   }
   tmuts$DPt=g$DP[,2]
   tmuts$DPn=g$DP[,1]
@@ -869,6 +1279,16 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # keep only PASS
   tmuts=tmuts[filter=='PASS',]
   
+   ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
+  # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
+  key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
+  key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
+  key1_refAF[is.na(value),1]=0
+  tmuts$allele1_swegen_count=key1_refAF$value
+  remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
+  tmuts <- tmuts[!remove,] # filtered.
+  
+  
   # VEP annotation is put in annotation_table
   annotation_table=matrix(data = NA,nrow = nrow(tmuts),ncol = length(vep_header))
   colnames(annotation_table)=vep_header
@@ -882,6 +1302,49 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   
   # Annotation table then concatenated 
   strelka_indels=cbind(tmuts,annotation_table)
+  
+   
+  # Keep high/mod-relevance in final output
+  impact=which(strelka_indels$IMPACT %in% c('HIGH','MODERATE'))
+  # Also keep Clinvar-pathogenic
+  clinvar_pathogenic=grep('pathogenic',strelka_indels$CLIN_SIG)
+  # And PolyPhen-damaging
+  polyphen_damaging=grep('damaging',strelka_indels$PolyPhen)
+  # And SIFT-deleterious
+  sift_deleterious=grep('deleterious',strelka_indels$SIFT)
+
+  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious)))
+  selection <- strelka_snvs[
+    keep,
+    .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+      ref,alt,DP=DPt,DPn,allele1_swegen_count,Gene_Tier=3,Effect_Tier=3)
+    ]
+  if (nrow(selection) > 0) {
+    for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    
+    # Genes in census or local list considered T2, census Tier1 then gets T1
+    selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
+    selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
+    
+    # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
+    selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
+    temp=paste(selection$SYMBOL,selection$Protein_position)
+    is_hotspot_pos <- 
+      temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
+      temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
+    selection[is_hotspot_pos | (IMPACT=='HIGH' &
+                                  selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
+    selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
+    
+    # Add ASCAT LOH.
+    for (i in 1:nrow(selection)) {
+      ix=ascat_cnv$chr==selection$chr[i] &
+        ascat_cnv$startpos<selection$start[i] &
+        ascat_cnv$endpos>selection$end[i]
+      if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
+    }
+  }
+  strelka_selected <- rbind(strelka_selected,selection)
 }
 ```
 
@@ -991,10 +1454,16 @@ if (length(haplotypecaller_N_file)>0) {
   key2 <- paste(nmuts$chr,nmuts$start,nmuts$alt2)
   has2 <- nmuts$alt2!=''
   key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
+  key1_refAF[is.na(value),1]=0
   key2_refAF <- swegen_hg38_allele_counts[key2,.(value)]
+  key2_refAF[is.na(value),1]=0
+  nmuts$allele1_swegen_count=key1_refAF$value
+  nmuts$allele2_swegen_count=key2_refAF$value
+  remove <- key1_refAF$value>=2 & (key2_refAF$value>=2 | !has2) #remove SNP if allele1 is ≥2 and (allele2 too or no second allele)
+  nmuts <- nmuts[!remove,] # filtered.
   
   # "info"" annotations also need to be added
-  nmuts=cbind(tmuts,data.table(info(vcf)[keep,]))
+  nmuts=cbind(nmuts,as.data.table(info(vcf)[!remove,]))
   ## get snpEff headers
   #snpeff_header=strsplit(info(header(vcf))['ANN',][,3],'ions: \'')[[1]][2]
   #snpeff_header=strsplit(snpeff_header,' \\| ')[[1]]
@@ -1003,19 +1472,63 @@ if (length(haplotypecaller_N_file)>0) {
   vep_header=strsplit(vep_header,'\\|')[[1]]
   
   # VEP annotation is put in annotation_table
-  annotation_table=matrix(data = NA,nrow = nrow(tmuts),ncol = length(vep_header))
+  annotation_table=matrix(data = NA,nrow = nrow(nmuts),ncol = length(vep_header))
   colnames(annotation_table)=vep_header
-  for (i in 1:nrow(tmuts)) { # for each variant
+  for (i in 1:nrow(nmuts)) { # for each variant
     # for each VEP annotation:
-    for (j in 1:length(tmuts$CSQ[[i]])) { 
-      line=strsplit(tmuts$CSQ[[i]][j],'\\|')[[1]]
+    for (j in 1:length(nmuts$CSQ[[i]])) { 
+      line=strsplit(nmuts$CSQ[[i]][j],'\\|')[[1]]
       annotation_table[i,1:length(line)]=line
     }
   }
   
   # Annotation table then concatenated 
-  mutect2_table=cbind(tmuts,annotation_table)
-  rownames(mutect2_table)=NULL
+  haplotypecaller_table=cbind(nmuts,annotation_table)
+  
+  # Keep high/mod-relevance in final output
+  impact=which(haplotypecaller_table$IMPACT %in% c('HIGH','MODERATE'))
+  # Also keep Clinvar-pathogenic
+  clinvar_pathogenic=grep('pathogenic',haplotypecaller_table$CLIN_SIG)
+  # And PolyPhen-damaging
+  polyphen_damaging=grep('damaging',haplotypecaller_table$PolyPhen)
+  # And SIFT-deleterious
+  sift_deleterious=grep('deleterious',haplotypecaller_table$SIFT)
+
+  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious)))
+  selection <- haplotypecaller_table[
+    keep,
+    .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+      ref,alt,alt2,DP,RD,AD,AD2,allele1_swegen_count,allele2_swegen_count)
+    ]
+  for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+  
+  selection$Gene_Tier <- 3
+  selection$Effect_Tier <- 3
+  
+  # Genes in census or local list considered T2, census Tier1 then gets T1
+  selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
+  selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
+    
+  # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
+  selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
+  temp=paste(selection$SYMBOL,selection$Protein_position)
+  is_hotspot_pos <- 
+    temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
+    temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
+  selection[is_hotspot_pos | (IMPACT=='HIGH' &
+                                selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
+  selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
+  
+  # Add ASCAT LOH.
+  for (i in 1:nrow(selection)) {
+    ix=ascat_cnv$chr==selection$chr[i] &
+      ascat_cnv$startpos<selection$start[i] &
+      ascat_cnv$endpos>selection$end[i]
+    if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
+  }
+  
+  haplotypecaller_selected <- selection
+  
 }
 ```
 &nbsp;
