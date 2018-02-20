@@ -38,6 +38,26 @@ hotspots_snv <- fread('~/Data//BTBdata//resources/MSK hotspots V2 (25000 samples
 oncokb_all <- fread('~/Data/BTBdata/resources/OncoKB/OncoKB-allAnnotatedVariants.txt')
 oncokb_act <- fread('~/Data/BTBdata/resources/OncoKB/OncoKB-allActionableVariants.txt')
 # also to add: our panel of tumors and normals for recurrent FPs
+
+# from paper Parsons et al
+familial_genes <- c("ALK", "APC", "ATM", "BAP1", "BLM", "BMPR1A", "BRCA1", "BRCA2", 
+                    "BRIP1", "BUB1B", "CDH1", "CDK4", "CDKN1B", "CDKN1C", "CDKN2A", 
+                    "CEBPA", "CEP57", "CHEK2", "CYLD", "DDB2", "DICER1", "DIS3L2", 
+                    "EGFR", "DKC1", "EPCAM", "ERCC2", "ERCC3", "ERCC4", "ERCC5", 
+                    "EXT1", "EXT2", "EZH2", "FANCA", "FANCB", "FANCC", "FANCD2", 
+                    "FANCE", "FANCF", "FANCG", "FANCI", "FANCL", "FANCM", "FH", "FLCN", 
+                    "GATA2", "GPC3", "HNF1A", "HRAS", "KIT", "LZTR1", "MAX", "MEN1", 
+                    "MET", "MLH1", "MSH2", "MSH6", "MUTYH", "NBN", "NF1", "NF2", 
+                    "NHP2", "NOP10", "PALB2", "PDGFRA", "PHOX2B", "PMS2", "PRKAR1A", 
+                    "PTCH1", "PTCH2", "PTEN", "RAD51C", "RAD51D", "RB1", "RECQL4", 
+                    "RET", "RHBDF2", "RPL5", "RPL11", "RPL26", "RPL35A", "RPS7", 
+                    "RPS10", "RPS17", "RPS19", "RPS24", "RPS26", "RUNX1", "SBDS", 
+                    "SDHAF2", "SDHB", "SDHC", "SDHD", "SLX4", "SMAD4", "SMARCA4", 
+                    "SMARCB1", "SMARCE1", "STK11", "SUFU", "TERC", "TERT", "TINF2", 
+                    "TMEM127", "TP53", "TSC1", "TSC2", "VHL", "WAS", "WRN", "WT1", 
+                    "XPA", "XPC")
+
+
 ## Save them as one file:
 save(chrsz,allgenes,tumorgenes,local_tumorgenes,hotspots_inframe,hotspots_snv,oncokb_act,oncokb_all,file='~/reports/mutations_genes_ref.Rdata')
 
@@ -48,6 +68,7 @@ save(chrsz,allgenes,tumorgenes,local_tumorgenes,hotspots_inframe,hotspots_snv,on
 ## Somatic amplification: remove too large?
 ## Somatic homozygous deletion: remove too large
 ## Germline deletion: remove if known CNV
+
 
 
 
