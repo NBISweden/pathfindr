@@ -12,15 +12,15 @@ editor_options:
 
  <!-- This script reads from a folder containing CAW (aka Sarek) output, including copy number data from ControlFreec and Ascat, structural variation from Manta, somatic point mutations from Mutact 2 and Strelka, and germline mutations from HaplotypeCaller.-->
 
+<!-- Markdown setup -->
+```{r setup}
+knitr::opts_chunk$set(echo = FALSE,comment = '',warning=F,error = F)
+cat('Sample:',basename(getwd()),'\tDirectory:',getwd(),'\tDate:',date())
+```
 
 # {.tabset .tabset-pills}
 
 ## Setup {.tabset}
-<!-- Markdown setup -->
-```{r setup}
-knitr::opts_chunk$set(echo = TRUE,comment = '',warning=F,error = F)
-```
-
 
 ### List files {.active}
 <!-- First, make a list of files to read and visualize -->
@@ -64,11 +64,13 @@ if (length(strelka_indel_file)==0)
   strelka_indel_file <- grep(pattern = glob2rx("*Annotation/VEP/Strelka_*_somatic_indels.vcf.vep.ann.PASS.recode.vcf"),files,value = T) # <- bianca
 
 rm(files)
-cat('Selected files in',getwd(),'\n\n')
-for ( obj in ls() ) { 
-  cat('---',obj,'---\n') 
-  print(get(obj)) 
-}
+{
+  cat('Selected files in',getwd(),'\n\n')
+  for ( obj in ls() ) { 
+    cat('---',obj,'---\n') 
+    print(get(obj)) 
+  }
+}  
 
 
 ```
@@ -82,19 +84,15 @@ for ( obj in ls() ) {
 ```
 
 ### Load dependencies
-<!-- Dependencies and reference data -->
+<!-- Dependencies -->
 ```{r}
 library(data.table)
-library(ggplot2)
-theme_set(theme_light())
+library(ggplot2); theme_set(theme_light())
 library(ggrepel)
 library(VariantAnnotation)
 library(VennDiagram)
-
-load('~/reports/swegen_hg38_allele_counts.Rdata') #  swegen_hg38_allele_counts
-load('~/reports/mutations_genes_ref.Rdata') #  cosmic,msk,oncokb
-load('~/reports/BTB_hg38_manta_counts.Rdata') #  btb_hg38_manta
-
+library(knitr)
+library(kableExtra)
 
 listfix <- function(list) {
   l=lapply(list,length)
@@ -103,16 +101,23 @@ listfix <- function(list) {
 }
 
 sampleData <- data.table(
-  date=date,
+  date=date(),
   directory=getwd(),
   name=basename(getwd())
 )
-
 ```
+
+<!-- Reference data files -->
+```{r}
+load('~/reports/swegen_hg38_allele_counts.Rdata') #  swegen_hg38_allele_counts
+load('~/reports/mutations_genes_ref.Rdata') #  cosmic,msk,oncokb
+load('~/reports/BTB_hg38_manta_counts.Rdata') #  btb_hg38_manta
+```
+
 
 ## Copy number {.tabset}
 
-### Parse ControlFreec
+### ControlFreec
 <!-- Read Control Freec copy number data -->
 ```{r}
 if (length(freec_Tratio_file)>0 &
@@ -222,10 +227,14 @@ if (length(freec_Tratio_file)>0 &
     }
   }
   
+  kable(cnvs, "html") %>%
+  kable_styling(bootstrap_options = "striped",position = "left") %>%
+  scroll_box(width = "1000px", height = "600px")
+  
 }
 ```
 
-### Parse Ascat
+### Ascat
 <!-- Read ASCAT copy number data -->
 ```{r,echo=F,include=F}
 if (length(ascat_Tratio_file)>0 &
@@ -452,14 +461,11 @@ if (exists('ascat_binned')) {
 }
 ```
 
-### ControlFreec table
-
-### Ascat table
 
 ## Structural variants {.tabset}
 
 <!-- Read the tumor structural variant data -->
-### Parse Manta (tumor)
+### Manta (tumor)
 ```{r, echo=FALSE}
 if (length(vep_Tstruct_file)>0) {
   tstruc_vcf=readVcf(file = vep_Tstruct_file,genome = 'GRCh38')
@@ -555,8 +561,7 @@ if (length(vep_Tstruct_file)>0) {
   # Add to data
   tstruc$N=as.character(1:nrow(tstruc))
   manta_tumor_table <- merge(tstruc,annotation_table,by='N')[order(cumstart),-1]
-  #manta_tumor_table <- manta_tumor_table[,-c('Feature','EXON','Protein_position','BIOTYPE')]
-  
+
   # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
   del_ok <- which(manta_tumor_table$SVTYPE=='DEL' & abs(manta_tumor_table$SVLEN)<3e6)
   # Amplification: consider <5M for amplification consequence, report census genes
@@ -671,11 +676,15 @@ if (length(vep_Tstruct_file)>0) {
 
   manta_tumor_selected <- selection
   
+  kable(manta_tumor_selected, "html") %>%
+  kable_styling(bootstrap_options = "striped",position = "left") %>%
+  scroll_box(width = "1000px", height = "600px")
+  
 }
 ```
 
 <!-- Read the normal structural variant data -->
-### Parse Manta (normal)
+### Manta (normal)
 ```{r, echo=FALSE}
 if (length(vep_Nstruct_file)>0) {
   nstruc_vcf=readVcf(file = vep_Nstruct_file,genome = 'GRCh38')
@@ -884,6 +893,10 @@ if (length(vep_Nstruct_file)>0) {
   
   manta_normal_selected <- selection
   
+  kable(manta_normal_selected, "html") %>%
+  kable_styling(bootstrap_options = "striped",position = "left") %>%
+  scroll_box(width = "1000px", height = "600px")
+  
 }
 
 
@@ -894,53 +907,72 @@ if (length(vep_Nstruct_file)>0) {
 
 <!-- Plot the tumor and normal (also showing copy number) structural variant data -->
 ### View structural variants {.active}
-```{r, echo=FALSE,fig.width=15,fig.height=3}
+```{r, echo=FALSE,fig.width=15,fig.height=6}
 cat(vep_Tstruct_file)
 if (exists('tstruc')) {
   par(mai=c(0,4,0,2))
-  g=ggplot()+ylab('Somatic structural variants')+expand_limits(x=c(0,3210e6))+ylim(-2,2)
+  g=ggplot()+ylab('Structural variants')+expand_limits(x=c(0,3210e6))+ylim(-4,4)
   # fix theme
   g=g+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                          axis.title.x=element_blank(),
-                          axis.text.x=element_blank(),
-                          axis.ticks.x=element_blank())
+            axis.title.x=element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank(),
+            axis.title.y=element_blank(),
+            axis.text.y=element_blank(),
+            axis.ticks.y=element_blank())
   # add chromosome lines
-  g=g+geom_segment(mapping = aes(x = starts,xend=starts,y=-2,yend=2),data=chrsz,inherit.aes = F,alpha=1/5)
+  g=g+geom_segment(mapping = aes(x = starts,xend=starts,y=-4,yend=4),data=chrsz,inherit.aes = F,alpha=1)
   # add copy data if present
+  ### TUMOR LOGRATIO  
   if (exists('tratio')) {
-    g=g+geom_point(aes(x=cumstart,y=log2(Ratio)),
-                   data = tratio,alpha=1/5,shape='.',
+    g=g+geom_line(aes(x=cumstart,y=log2(Ratio)+2),
+                   data = tratio,alpha=1/3,
+                   stat="identity",colour="black")
+  } else if (exists('ascat_tratio')) {
+    g=g+geom_line(aes(x=cumstart,y=log2(smoothed)),
+                   data = ascat_tratio,alpha=1/3,
+                   stat="identity",colour="black")
+  }
+  ### NORMAL LOGRATIO  
+  if (exists('nratio')) {
+    g=g+geom_line(aes(x=cumstart,y=log2(Ratio)-2),
+                   data = nratio,alpha=1/3,
                    stat="identity",colour="grey")
   }
+
   # add chromosome labels
-  g=g+geom_text(aes(x=starts+0.5*length,y=0.7,label=chr),data = chrsz,inherit.aes = F)
-  # add the structural variants
-  #g=g+geom_point(aes(x = cumstart,y = 1,col=SVTYPE),data=tstruc[tstruc$FILTER=='PASS',])
-  g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=0.999-1,yend=1-1,col=SVTYPE,linetype=IMPRECISE),
-                 data = tstruc[tstruc$FILTER=='PASS' & tstruc$plot,],alpha=1/2,
+  g=g+geom_text(aes(x=starts+0.5*length,y=0,label=chr),data = chrsz,inherit.aes = F)
+  # add the TUMOR structural variants
+  g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=0.499,yend=0.5,col=SVTYPE,linetype=IMPRECISE),
+                 data = manta_tumor_table,alpha=1/2,
                  stat = "identity",curvature=-0.2,size=1,
-                 position = "identity", angle = 90, ncp = 50,
+                 position = "identity", angle = 90, ncp = 10,
                  arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
                  inherit.aes = FALSE)+
     scale_color_manual(values=c("BND"="#E41A1C", "DEL"="#377EB8", "INV"="#4DAF4A", "INS"="#984EA3", "DUP"="#FF7F00"))+
     scale_linetype_manual(values=c('TRUE'=2,'FALSE'=1))
+  # add the NORMAL structural variants
+  g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=-0.499,yend=-.5,col=SVTYPE,linetype=IMPRECISE),
+                 data = manta_normal_table,alpha=1/2,
+                 stat = "identity",curvature=-0.2,size=1,
+                 position = "identity", angle = 90, ncp = 10,
+                 arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
+                 inherit.aes = FALSE)
+  
   g
 }
 ```
 
-### SV table (tumor)
-
-### SV table (normal)
 
 
+## Somatic point mutations {.tabset}
 
-## Somatic point mutations {.active .tabset}
-
-### Parse Mutect 2
+### Mutect 2
 <!-- Read annotated small variant data (Mutect 2) -->
 ```{r, echo=FALSE}
 if (length(mutect2_file)>0) {
   vcf=readVcf(file = mutect2_file,genome ='GRCh38')
+  m2vcf <- vcf # for later export
   g=geno(vcf)
   inf=(info(vcf))
   rr=rowRanges(vcf)
@@ -1058,14 +1090,20 @@ if (length(mutect2_file)>0) {
     }
   }
   mutect2_selected <- selection
+  
+  kable(mutect2_selected, "html") %>%
+  kable_styling(bootstrap_options = "striped",position = "left") %>%
+  scroll_box(width = "1000px", height = "600px")
+  
 }
 ```
 
-### Parse Strelka
+### Strelka
 <!-- Read annotated small variant data (Strelka, two files) -->
 ```{r, echo=FALSE}
 if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   vcf=readVcf(file = strelka_snv_file,genome ='GRCh38')
+  stvcf=vcf # for later use
   g=geno(vcf)
   inf=(info(vcf))
   rr=rowRanges(vcf)
@@ -1288,6 +1326,11 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
     }
   }
   strelka_selected <- rbind(strelka_selected,selection)
+  
+  kable(strelka_selected, "html") %>%
+  kable_styling(bootstrap_options = "striped",position = "left") %>%
+  scroll_box(width = "1000px", height = "600px")
+  
 }
 ```
 
@@ -1300,7 +1343,17 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
 cat(mutect2_file)
 if (exists('mutect2_table')) {
   par(mai=c(1,4,0,2))
-  g=ggplot(data = mutect2_table[mutect2_table$filter=='PASS',],
+  
+  # compare content in callers
+  mutect2_temp=apply(X = mutect2_table[,c('chr','start','end','ref','alt'),],
+                     MARGIN = 1,FUN = paste,collapse=' ')
+  strelka_temp=apply(X = rbind(strelka_snvs[,c('chr','start','end','ref','alt'),],
+                               strelka_indels[,c('chr','start','end','ref','alt'),]),
+                     MARGIN = 1,FUN = paste,collapse=' ')
+  mutect2_table$Callers <- 'Mutect 2'
+  mutect2_table$Callers[mutect2_temp %in% strelka_temp]='Mutect 2 and Strelka'
+  
+  g=ggplot(data = mutect2_table[mutect2_table$filter=='PASS' & mutect2_table$Callers=='Mutect 2 and Strelka',],
            aes(x=cumstart,y=TUMOR,fill=type,shape=type,col=reads))+
     geom_point(alpha=1)+
     ylab('Somatic mutation allele ratio')+
@@ -1343,7 +1396,7 @@ if (exists('strelka_indels') &
     exists('strelka_snvs') &
     exists('mutect2_table')) {
   
-  # First make a merged table of findings
+  # compare content in callers
   mutect2_temp=apply(X = mutect2_table[,c('chr','start','end','ref','alt'),],
                      MARGIN = 1,FUN = paste,collapse=' ')
   strelka_temp=apply(X = rbind(strelka_snvs[,c('chr','start','end','ref','alt'),],
@@ -1386,14 +1439,11 @@ if (exists('strelka_indels') &
 ```
 
 
-### Mutect 2 table
-
-### Strelka table
 
 
 ## Germline point mutations {.tabset}
 
-### Parse HaplotypeCaller (normal)
+### HaplotypeCaller (normal)
 <!-- Read annotated small variant data (Haplotype caller, normal) -->
 ```{r, echo=FALSE}
 if (length(haplotypecaller_N_file)>0) {
@@ -1511,20 +1561,69 @@ if (length(haplotypecaller_N_file)>0) {
   
   haplotypecaller_selected <- selection
   
+  kable(haplotypecaller_selected, "html") %>%
+  kable_styling(bootstrap_options = "striped",position = "left") %>%
+  scroll_box(width = "1000px", height = "600px")
+  
 }
 ```
 
-### View germline point mutations {.active}
-
-### HaplotypeCaller table
-
-<!-- ## Combined view? like chromwise plot but all genome. -->
 
 
-## View by chromosome {.tabset}
+## All variants {.active .tabset}
+
+### Write data files
+```{r}
+  # export overlap with Mutect2 to new file:
+  vrA <- as(m2vcf, "VRanges")
+  vrB <- as(stvcf, "VRanges")
+  writeVcf(obj = vrA[vrA %in% vrB],filename = paste0(sampleData$name,'_forPatterns.vcf'))
+  #
+  # export bed file of all relevant genomic regions
+  write.table(
+    x = unique(rbind(
+      manta_tumor_table[,.(chr,start,end=start)],
+      manta_tumor_table[,.(chr,start=end,end)],
+      manta_tumor_table[!is.na(altpos),.(chr=altchr,start=altpos,end=altpos)],
+      manta_normal_table[,.(chr,start,end=start)],
+      manta_normal_table[,.(chr,start=end,end)],
+      manta_normal_table[!is.na(altpos),.(chr=altchr,start=altpos,end=altpos)],
+      mutect2_table[,.(chr,start,end)],
+      strelka_snvs[,.(chr,start,end)],
+      strelka_indels[,.(chr,start,end)],
+      haplotypecaller_table[,.(chr,start,end)])
+    ),
+    file = paste0(sampleData$name,'_forBamfile.bed'
+    ),
+    sep = '\t',row.names = F,col.names = F)
+  #
+  # export a data structure for downstream analysis
+  sampleList <- list(
+    nameHere=list(
+      sampleData,
+      cnvs,
+      ascat_cnv,
+      manta_normal_selected,#manta_normal_table,
+      manta_tumor_selected,#manta_tumor_table,
+      mutect2_selected,#mutect2_table,
+      strelka_selected,#strelka_indels,strelka_snvs,
+      haplotypecaller_selected#,haplotypecaller_table # >2GB with the bid tables added
+    )
+  )
+  names(sampleList)=sampleData$name
+  save(sampleList,file=paste0(sampleData$name,'_data.Rata'))
+  
+```
+
+### Combined view {.active}
+```{r}
+print('TODO')
+```
+
+## Chromosome view {.tabset}
 <!-- Plot composite data, chromosome wise -->
 ```{r}
-chromplot=function(chr) {
+chromplot=function(thischr) {
   par(mai=c(0,4,0,2))
   g=ggplot()+
     scale_y_continuous(limits=c(-2.5,3),
@@ -1534,9 +1633,9 @@ chromplot=function(chr) {
                          c('Tumor DNA=1.5','Tumor Copy Ratio\n(median centered)','Tumor DNA=0.5\nMutation AF=1','Mutation AF=0.5','Mutation AF=0\nTumor SNP AF=1',
                            'Tumor\nSNPs','Tumor SNP AF=0\nNormal SNP AF=1','Normal\nSNPs','Normal SNP AF=0'))+
     scale_x_continuous(
-      breaks = 10e6*seq(0,ceiling(chrsz$length[chrsz$chr==chr]/10e6)),
-      labels= c('0',paste0(10*seq(1,ceiling(chrsz$length[chrsz$chr==chr]/10e6)),'M')),
-      minor_breaks = 1e6*seq(0,ceiling(chrsz$length[chrsz$chr==chr]/1e6)))+
+      breaks = 10e6*seq(0,ceiling(chrsz$length[chrsz$chr==thischr]/10e6)),
+      labels= c('0',paste0(10*seq(1,ceiling(chrsz$length[chrsz$chr==thischr]/10e6)),'M')),
+      minor_breaks = 1e6*seq(0,ceiling(chrsz$length[chrsz$chr==thischr]/1e6)))+
     theme(panel.grid.minor.x = element_line(colour="lightgrey", size=0.05),
           panel.grid.major.x = element_line(colour="grey", size=0.2),
           panel.grid.major.y = element_line(colour="black", size=0.2),
@@ -1552,21 +1651,21 @@ chromplot=function(chr) {
     temp <- tratio
     temp$Ratio[temp$Ratio>3]=3
     g=g+geom_line(aes(x=Start,y=Ratio),
-                   data = temp[temp$Chromosome==chr,],alpha=1/3,
+                   data = temp[temp$Chromosome==thischr,],alpha=1/3,
                    stat="identity",colour="black")
   }
   else if (exists('ascat_tratio')) {
     temp <- ascat_tratio
     temp$smoothed[temp$smoothed>3]=3
     g=g+geom_line(aes(x=Position,y=smoothed),
-                   data = temp[temp$Chr==chr,],alpha=1/3,
+                   data = temp[temp$Chr==thischr,],alpha=1/3,
                    stat="identity",colour="black")
   }
   
   ### TUMOR STRVAR  
   if (exists('tstruc')) {
-    temp=tstruc[tstruc$chr==chr & tstruc$FILTER=='PASS' & tstruc$altchr==tstruc$chr,]
-    thischrstart=chrsz$starts[chrsz$chr==chr]
+    temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr==tstruc$chr,]
+    thischrstart=chrsz$starts[chrsz$chr==thischr]
     if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=0.999,yend=1,col=SVTYPE,linetype=IMPRECISE),
                                      data = temp,alpha=1/2,
                                      curvature=-0.2,size=1,
@@ -1579,7 +1678,7 @@ chromplot=function(chr) {
   
   ### TUMOR MUTATIONS  
   if (exists('mutect2_table')) {
-    temp=mutect2_table[mutect2_table$chr==chr & mutect2_table$filter=='PASS',]
+    temp=mutect2_table[chr==thischr & filter=='PASS' & Callers=='Mutect 2 and Strelka',]
     if (nrow(temp)>0) { 
       g=g+geom_point(aes(x=start,y=TUMOR -0.5,fill=type,shape=type),data = temp,alpha=1)+
         scale_fill_manual(values = c("A>C"="#1B9E77","A>G"="#D95F02", "A>T"="#7570B3", "C>A"="#E7298A", "C>G"="#66A61E", "C>T"="#E6AB02", "del"="#A6761D", "ins"="#666666"))+
@@ -1594,20 +1693,19 @@ chromplot=function(chr) {
   
   ### SNPS
   if (exists('tbaf')) { 
-    g=g+geom_point(aes(x=Position,y=BAF -1.5),data = tbaf[tbaf$Chromosome==chr,],alpha=1/8,shape='.') 
+    g=g+geom_point(aes(x=Position,y=BAF -1.5),data = tbaf[tbaf$Chromosome==thischr,],alpha=1/8,shape='.') 
   } else if (exists('ascat_tbaf'))  {
-    g=g+geom_point(aes(x=Position,y=BAF -1.5),data = ascat_tbaf[ascat_tbaf$Chr==chr,],alpha=1/8,shape='.')
+    g=g+geom_point(aes(x=Position,y=BAF -1.5),data = ascat_tbaf[ascat_tbaf$Chr==thischr,],alpha=1/8,shape='.')
   }
   if (exists('nbaf')) {
-    g=g+geom_point(aes(x=Position,y=BAF -2.5),data = nbaf[nbaf$Chromosome==chr,],alpha=1/8,shape='.')
+    g=g+geom_point(aes(x=Position,y=BAF -2.5),data = nbaf[nbaf$Chromosome==thischr,],alpha=1/8,shape='.')
   } else if (exists('ascat_nbaf')) {
-    g=g+geom_point(aes(x=Position,y=NBAF -1.5),data = ascat_nbaf[ascat_nbaf$Chr==chr,],alpha=1/8,shape='.')
+    g=g+geom_point(aes(x=Position,y=NBAF -1.5),data = ascat_nbaf[ascat_nbaf$Chr==thischr,],alpha=1/8,shape='.')
   }
   return(g)
 }
 ```
 
-&nbsp;
 
 ### 1
 ```{r,fig.width=15,fig.height=10}
@@ -1615,138 +1713,161 @@ chr=1
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 2
 ```{r,fig.width=15,fig.height=10}
 chr=2
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 3
 ```{r,fig.width=15,fig.height=10}
 chr=3
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 4
 ```{r,fig.width=15,fig.height=10}
 chr=4
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 5
 ```{r,fig.width=15,fig.height=10}
 chr=5
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 6
 ```{r,fig.width=15,fig.height=10}
 chr=6
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 7
 ```{r,fig.width=15,fig.height=10}
 chr=7
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 8
 ```{r,fig.width=15,fig.height=10}
 chr=8
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 9
 ```{r,fig.width=15,fig.height=10}
 chr=9
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 10
 ```{r,fig.width=15,fig.height=10}
 chr=10
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 11
 ```{r,fig.width=15,fig.height=10}
 chr=11
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 12
 ```{r,fig.width=15,fig.height=10}
 chr=12
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 13
 ```{r,fig.width=15,fig.height=10}
 chr=13
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 14
 ```{r,fig.width=15,fig.height=10}
 chr=14
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 15
 ```{r,fig.width=15,fig.height=10}
 chr=15
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 16
 ```{r,fig.width=15,fig.height=10}
 chr=16
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 17
 ```{r,fig.width=15,fig.height=10}
 chr=17
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 18
 ```{r,fig.width=15,fig.height=10}
 chr=18
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 19
 ```{r,fig.width=15,fig.height=10}
 chr=19
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 20
 ```{r,fig.width=15,fig.height=10}
 chr=20
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 21
 ```{r,fig.width=15,fig.height=10}
 chr=21
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### 22
 ```{r,fig.width=15,fig.height=10}
 chr=22
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### X
 ```{r,fig.width=15,fig.height=10}
 chr='X'
 cat('Chromosome',chr)
 chromplot(chr)
 ```
+
 ### Y
 ```{r,fig.width=15,fig.height=10}
 chr='Y'

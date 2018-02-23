@@ -1,3 +1,8 @@
 *.html
 Data
-.DS_Store
+*.DS_Store
+*.Rhistory
+*.log
+*.gitignore
+VennDiagram*
+*.vcf
