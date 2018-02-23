@@ -349,8 +349,12 @@ if (exists('tratio')) {
 
   g=ggplot()+ylab('B allele ratio and Coverage Ratio')+
     scale_color_gradientn(colours = c('violet','blue','black','red','orange'))+
-    ylim(-1,3)+
-    expand_limits(x=c(0,3200e6))
+    expand_limits(x=c(0,3200e6))+
+    scale_y_continuous(limits=c(-1,3),
+                       breaks = 0:2,
+                       minor_breaks = seq(0,2.5,0.5),
+                       labels = 0:2
+    )
   # normal logR below
   g=g+geom_point(aes(x=cumstart,y=Ratio-0.3),col='darkgrey',data=nratio,alpha=1/5,shape='.')
   # tumor logR
@@ -413,7 +417,11 @@ if (exists('ascat_tratio')) {
   temp$smoothed[temp$smoothed>3]=3
   g=ggplot()+
     scale_color_gradientn(colours = c('violet','blue','black','red','orange'))+
-    ylim(-1,3)+
+    scale_y_continuous(limits=c(-1,3),
+                       breaks = 0:2,
+                       minor_breaks = seq(0,2.5,0.5),
+                       labels = 0:2
+    )
     expand_limits(x=c(0,3200e6))
   # using smoothed logR
   g=g+geom_point(aes(x=cumstart,y=smoothed,color=CopyNumber),data=temp,alpha=1/5,shape='.')
@@ -462,7 +470,7 @@ if (exists('ascat_binned')) {
 ```
 
 
-## Structural variants {.tabset}
+## Structural variants {.active .tabset}
 
 <!-- Read the tumor structural variant data -->
 ### Manta (tumor)
@@ -907,7 +915,7 @@ if (length(vep_Nstruct_file)>0) {
 
 <!-- Plot the tumor and normal (also showing copy number) structural variant data -->
 ### View structural variants {.active}
-```{r, echo=FALSE,fig.width=15,fig.height=6}
+```{r, echo=FALSE,fig.width=15,fig.height=8}
 cat(vep_Tstruct_file)
 if (exists('tstruc')) {
   par(mai=c(0,4,0,2))
@@ -935,7 +943,7 @@ if (exists('tstruc')) {
   }
   ### NORMAL LOGRATIO  
   if (exists('nratio')) {
-    g=g+geom_line(aes(x=cumstart,y=log2(Ratio)-2),
+    g=g+geom_line(aes(x=cumstart,y=log2(Ratio)-1),
                    data = nratio,alpha=1/3,
                    stat="identity",colour="grey")
   }
@@ -943,21 +951,30 @@ if (exists('tstruc')) {
   # add chromosome labels
   g=g+geom_text(aes(x=starts+0.5*length,y=0,label=chr),data = chrsz,inherit.aes = F)
   # add the TUMOR structural variants
-  g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=0.499,yend=0.5,col=SVTYPE,linetype=IMPRECISE),
-                 data = manta_tumor_table,alpha=1/2,
-                 stat = "identity",curvature=-0.2,size=1,
+  g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=1.499,yend=1.5,col=SVTYPE,linetype=IMPRECISE),
+                 data = unique(manta_tumor_table[,.(cumstart,altcumpos,SVTYPE,IMPRECISE)]),alpha=1/2,
+                 stat = "identity",curvature=-0.2,size=0.5,
                  position = "identity", angle = 90, ncp = 10,
                  arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
                  inherit.aes = FALSE)+
     scale_color_manual(values=c("BND"="#E41A1C", "DEL"="#377EB8", "INV"="#4DAF4A", "INS"="#984EA3", "DUP"="#FF7F00"))+
     scale_linetype_manual(values=c('TRUE'=2,'FALSE'=1))
   # add the NORMAL structural variants
-  g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=-0.499,yend=-.5,col=SVTYPE,linetype=IMPRECISE),
-                 data = manta_normal_table,alpha=1/2,
-                 stat = "identity",curvature=-0.2,size=1,
+  g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=-1.499,yend=-1.5,col=SVTYPE,linetype=IMPRECISE),
+                 data = unique(manta_normal_table[THISID %in% manta_normal_selected[Gene_Tier<3,ID],
+                                                  .(cumstart,altcumpos,SVTYPE,IMPRECISE)]),alpha=1/2,
+                 stat = "identity",curvature=-0.2,size=0.5,
                  position = "identity", angle = 90, ncp = 10,
                  arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
                  inherit.aes = FALSE)
+  # add TUMOR data afflicted cosmic genes
+  g=g+geom_label_repel(mapping = aes(x = cumstart,y = 1.45,label=name),
+                      data = allgenes[name %in% manta_tumor_selected$SYMBOL[manta_tumor_selected$Gene_Tier<3]],
+                      size=2)
+  # add NORMAL data afflicted cosmic genes
+  g=g+geom_label_repel(mapping = aes(x = cumstart,y = -1.55,label=name),
+                      data = allgenes[name %in% manta_normal_selected$SYMBOL[manta_normal_selected$Gene_Tier<3]],
+                      size=2)
   
   g
 }
@@ -1570,7 +1587,7 @@ if (length(haplotypecaller_N_file)>0) {
 
 
 
-## All variants {.active .tabset}
+## All variants {.tabset}
 
 ### Write data files
 ```{r}
