@@ -4,21 +4,24 @@ output:
       toc: false
       toc_float: false
       toc_depth: 4
-      code_folding: hide
+      code_folding: NULL
       df_print: paged
 editor_options: 
   chunk_output_type: console
 ---
 
- <!-- This script reads from a folder containing CAW (aka Sarek) output, including copy number data from ControlFreec and Ascat, structural variation from Manta, somatic point mutations from Mutact 2 and Strelka, and germline mutations from HaplotypeCaller.-->
+<!-- This script reads from a folder containing CAW (aka Sarek) output, including copy number data from ControlFreec and Ascat, structural variation from Manta, somatic point mutations from Mutact 2 and Strelka, and germline mutations from HaplotypeCaller.-->
 
 <!-- Markdown setup -->
 ```{r setup, include=F}
 knitr::opts_chunk$set(echo = FALSE,comment = '',warning=F,error = F)
-cat('Sample:',basename(getwd()),'\tDirectory:',getwd(),'\tDate:',date())
 ```
 
 # {.tabset .tabset-pills}
+
+```{r}
+cat('Sample:',basename(getwd()),'\tDirectory:',getwd(),'\tDate:',date())
+```
 
 ## Setup {.tabset}
 
@@ -92,7 +95,7 @@ library(ggrepel)
 library(VariantAnnotation)
 library(VennDiagram)
 library(knitr)
-library(kableExtra)
+#library(kableExtra)
 
 listfix <- function(list) {
   l=lapply(list,length)
@@ -136,7 +139,7 @@ if (length(freec_Tratio_file)>0 &
   nbaf <- fread(freec_Nbaf_file)[,1:3]
   # merged
   mbaf <- merge(tbaf,nbaf,by = c('Chromosome','Position'))
-
+  
   # manipulate for plot:
   tratio$cumstart <- tratio$Start
   nratio$cumstart <- nratio$Start
@@ -227,13 +230,13 @@ if (length(freec_Tratio_file)>0 &
     }
   }
   
-  kable(cnvs, "html") %>%
-    kable_styling(bootstrap_options = "striped",position = "left") %>%
-    scroll_box(width = "1400px", height = "600px")# %>%
-    # row_spec(row = which(cnvs$Gene_Tier==2 | cnvs$Effect_Tier==2), background = "#FF500040") %>%
-    # row_spec(row = which(cnvs$Gene_Tier==1 | cnvs$Effect_Tier==1), background = "#FFFF0040") %>%
-    # row_spec(row = which(cnvs$Gene_Tier==1 & cnvs$Effect_Tier==1), background = "#00FF0040")
-    # 
+  kable(cnvs, "html") #%>%
+    #kable_styling(bootstrap_options = "striped",position = "left") %>%
+    #scroll_box(width = "1400px", height = "600px")# %>%
+  # row_spec(row = which(cnvs$Gene_Tier==2 | cnvs$Effect_Tier==2), background = "#FF500040") %>%
+  # row_spec(row = which(cnvs$Gene_Tier==1 | cnvs$Effect_Tier==1), background = "#FFFF0040") %>%
+  # row_spec(row = which(cnvs$Gene_Tier==1 & cnvs$Effect_Tier==1), background = "#00FF0040")
+  # 
   
 }
 ```
@@ -308,7 +311,7 @@ if (length(ascat_Tratio_file)>0 &
   ascat_tratio$Copies[ascat_tratio$LOH=='yes' & ascat_tratio$CopyNumber>1]='LOH'
   ascat_tratio$Copies[ascat_tratio$CopyNumber==4]='≥4'
   ascat_tratio$Copies[1:6]=c('0','1','LOH','2','3','≥4')
-
+  
   # smooth data for view
   ascat_binned=NULL
   for (i in 1:nrow(chrsz)) {
@@ -365,9 +368,9 @@ if (length(ascat_Tratio_file)>0 &
       }
     }
   }
-  kable(ascat_cnv, "html") %>%
-  kable_styling(bootstrap_options = "striped",position = "left") %>%
-  scroll_box(width = "1400px", height = "600px")
+  kable(ascat_cnv, "html") #%>%
+    #kable_styling(bootstrap_options = "striped",position = "left") %>%
+    #scroll_box(width = "1400px", height = "600px")
 }
 ```
 
@@ -383,7 +386,7 @@ if (exists('tratio')) {
   par(mai=c(0,4,0,2))
   temp <- tratio
   temp$Ratio[temp$Ratio>3]=3
-
+  
   g=ggplot()+ylab('B allele ratio and Coverage Ratio')+
     scale_color_gradientn(colours = c('violet','blue','black','red','orange'))+
     expand_limits(x=c(0,3200e6))+
@@ -400,9 +403,9 @@ if (exists('tratio')) {
   g=g+geom_line(aes(x=cumpos,y=tratio),stat="identity",colour="green",data=binned)
   
   g=g+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                          axis.title.x=element_blank(),
-                          axis.text.x=element_blank(),
-                          axis.ticks.x=element_blank())
+            axis.title.x=element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank())
   # add tBAF
   g=g+geom_point(data = tbaf,aes(x=cumstart,y=-0.5+0.5*BAF),
                  alpha=1/50,shape='.')
@@ -413,7 +416,7 @@ if (exists('tratio')) {
   g=g+geom_segment(mapping = aes(x = starts,xend=starts,y= -1,yend=3),data=chrsz,inherit.aes = F,alpha=1/5)
   # add chromosome labels
   g=g+geom_text(aes(x=starts+0.5*length,y=0.1,label=chr),data = chrsz,inherit.aes = F)
-
+  
   g
 }
 ```
@@ -459,16 +462,16 @@ if (exists('ascat_tratio')) {
                        minor_breaks = seq(0,2.5,0.5),
                        labels = 0:2
     )
-    expand_limits(x=c(0,3200e6))
+  expand_limits(x=c(0,3200e6))
   # using smoothed logR
   g=g+geom_point(aes(x=cumstart,y=smoothed,color=CopyNumber),data=temp,alpha=1/5,shape='.')
   # add smoothed
   g=g+geom_line(aes(x=cumpos,y=tratio),stat="identity",colour="green",data=ascat_binned)
   
   g=g+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                          axis.title.x=element_blank(),
-                          axis.text.x=element_blank(),
-                          axis.ticks.x=element_blank())
+            axis.title.x=element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank())
   # add tBAF
   g=g+geom_point(mapping = aes(x=cumstart,y=-0.5+0.5*BAF),data = ascat_tratio,
                  alpha=1/50,shape='.')
@@ -479,7 +482,7 @@ if (exists('ascat_tratio')) {
   g=g+geom_segment(mapping = aes(x = starts,xend=starts,y= -1,yend=3),data=chrsz,inherit.aes = F,alpha=1/5)
   # add chromosome labels
   g=g+geom_text(aes(x=starts+0.5*length,y=0.1,label=chr),data = chrsz,inherit.aes = F)
-
+  
   g
 }
 ```
@@ -581,9 +584,9 @@ if (length(vep_Tstruct_file)>0) {
     tstruc$altcumpos[ix]=tstruc$altpos[ix]+chrsz$starts[i]
   }
   
-
   
-
+  
+  
   # annotation is in the CSQ column.
   h=strsplit(info(header(tstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
   vep_header=strsplit(h,'\\|')[[1]]
@@ -606,7 +609,7 @@ if (length(vep_Tstruct_file)>0) {
   # Add to data
   tstruc$N=as.character(1:nrow(tstruc))
   manta_tumor_table <- merge(tstruc,annotation_table,by='N')[order(cumstart),-1]
-
+  
   # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
   del_ok <- which(manta_tumor_table$SVTYPE=='DEL' & abs(manta_tumor_table$SVLEN)<3e6)
   # Amplification: consider <5M for amplification consequence, report census genes
@@ -618,25 +621,25 @@ if (length(vep_Tstruct_file)>0) {
   cumstart=allgenes$cumstart
   cumend=allgenes$cumend
   for (i in 1:nrow(manta_tumor_table)) {
-      i=as.integer(i)
-      #cat(i,'\n')
-      g=manta_tumor_table$SYMBOL[i]
-      # genes overlapping SV start
-      t=manta_tumor_table$cumstart[i]
-      ix=cumstart-10e3 < t & cumend +10e3 > t
-      if (length(ix)>0) {
-        genes=allgenes[ix,unique(name)]
-        set(manta_tumor_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
-        if (g %in% genes) set(manta_tumor_table,i,'Junction',value='Y')
-      }
-      # genes overlapping SV end
-      t=manta_tumor_table$altcumpos[i]
-      ix=cumstart-10e3 < t & cumend +10e3 > t
-      if (length(ix)>0) {
-        genes=allgenes[ix,unique(name)]
-        set(manta_tumor_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
-        if (g %in% genes) set(manta_tumor_table,i,'Junction',value='Y')
-      }
+    i=as.integer(i)
+    #cat(i,'\n')
+    g=manta_tumor_table$SYMBOL[i]
+    # genes overlapping SV start
+    t=manta_tumor_table$cumstart[i]
+    ix=cumstart-10e3 < t & cumend +10e3 > t
+    if (length(ix)>0) {
+      genes=allgenes[ix,unique(name)]
+      set(manta_tumor_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
+      if (g %in% genes) set(manta_tumor_table,i,'Junction',value='Y')
+    }
+    # genes overlapping SV end
+    t=manta_tumor_table$altcumpos[i]
+    ix=cumstart-10e3 < t & cumend +10e3 > t
+    if (length(ix)>0) {
+      genes=allgenes[ix,unique(name)]
+      set(manta_tumor_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
+      if (g %in% genes) set(manta_tumor_table,i,'Junction',value='Y')
+    }
   }
   # Inside genes: Junctions may be putative fusion or knock-out if either end is "this" gene.
   afflicted_ok <- which(manta_tumor_table$Junction=='Y')
@@ -644,12 +647,12 @@ if (length(vep_Tstruct_file)>0) {
   ## Make new table with predicted effects
   selection <- unique(
     manta_tumor_table[unique(sort(c(del_ok, amp_ok, afflicted_ok))),
-                                 .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
-                                   SYMBOL,Starts_Near,Ends_Near,
-                                   Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
-                                   Consequence,REF,altpos,ALT=unlist(ALT))]
+                      .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
+                        SYMBOL,Starts_Near,Ends_Near,
+                        Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
+                        Consequence,REF,altpos,ALT=unlist(ALT))]
   )
-
+  
   
   # Set gene tier to 1,2 based on Cosmic
   selection[SYMBOL %in% tumorgenes$`Gene Symbol` | SYMBOL %in% local_tumorgenes$V1]$Gene_Tier <- 2
@@ -717,14 +720,14 @@ if (length(vep_Tstruct_file)>0) {
     if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
   }
   selection <- selection[order(Effect_Tier,Gene_Tier)]
-
+  
   manta_tumor_selected <- selection
   
-  kable(manta_tumor_selected, "html") %>%
-  kable_styling(bootstrap_options = "striped",position = "left") %>%
-  column_spec(7, width = "20em") %>%
-  column_spec(9, width = "20em") %>%
-  scroll_box(width = "1400px", height = "600px")
+  kable(manta_tumor_selected, "html") #%>%
+    #kable_styling(bootstrap_options = "striped",position = "left") %>%
+    #column_spec(7, width = "20em") %>%
+    #column_spec(9, width = "20em") %>%
+    #scroll_box(width = "1400px", height = "600px")
 }
 ```
 
@@ -799,7 +802,7 @@ if (length(vep_Nstruct_file)>0) {
     nstruc$altcumpos[ix]=nstruc$altpos[ix]+chrsz$starts[i]
   }
   
-
+  
   
   # annotation is in the CSQ column.
   h=strsplit(info(header(nstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
@@ -823,7 +826,7 @@ if (length(vep_Nstruct_file)>0) {
   # Add to data
   nstruc$N=as.character(1:nrow(nstruc))
   manta_normal_table <- merge(nstruc,annotation_table,by='N')[order(cumstart),-1]
-
+  
   # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
   del_ok <- which(manta_normal_table$SVTYPE=='DEL' & abs(manta_normal_table$SVLEN)<3e6)
   # Amplification: consider <5M for amplification consequence, report census genes
@@ -835,25 +838,25 @@ if (length(vep_Nstruct_file)>0) {
   cumstart=allgenes$cumstart
   cumend=allgenes$cumend
   for (i in 1:nrow(manta_normal_table)) {
-      i=as.integer(i)
-      #cat(i,'\n')
-      g=manta_normal_table$SYMBOL[i]
-      # genes overlapping SV start
-      t=manta_normal_table$cumstart[i]
-      ix=cumstart-10e3 < t & cumend +10e3 > t
-      if (length(ix)>0) {
-        genes=allgenes[ix,unique(name)]
-        set(manta_normal_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
-        if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
-      }
-      # genes overlapping SV end
-      t=manta_normal_table$altcumpos[i]
-      ix=cumstart-10e3 < t & cumend +10e3 > t
-      if (length(ix)>0) {
-        genes=allgenes[ix,unique(name)]
-        set(manta_normal_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
-        if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
-      }
+    i=as.integer(i)
+    #cat(i,'\n')
+    g=manta_normal_table$SYMBOL[i]
+    # genes overlapping SV start
+    t=manta_normal_table$cumstart[i]
+    ix=cumstart-10e3 < t & cumend +10e3 > t
+    if (length(ix)>0) {
+      genes=allgenes[ix,unique(name)]
+      set(manta_normal_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
+      if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
+    }
+    # genes overlapping SV end
+    t=manta_normal_table$altcumpos[i]
+    ix=cumstart-10e3 < t & cumend +10e3 > t
+    if (length(ix)>0) {
+      genes=allgenes[ix,unique(name)]
+      set(manta_normal_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
+      if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
+    }
   }
   # Inside genes: Junctions may be putative fusion or knock-out if either end is "this" gene.
   afflicted_ok <- which(manta_normal_table$Junction=='Y')
@@ -861,10 +864,10 @@ if (length(vep_Nstruct_file)>0) {
   ## Make new table with predicted effects
   selection <- unique(
     manta_normal_table[unique(sort(c(del_ok, amp_ok, afflicted_ok))),
-                                 .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
-                                   SYMBOL,Starts_Near,Ends_Near,
-                                   Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
-                                   Consequence,REF,altpos,ALT=unlist(ALT))]
+                       .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
+                         SYMBOL,Starts_Near,Ends_Near,
+                         Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
+                         Consequence,REF,altpos,ALT=unlist(ALT))]
   )
   
   # Set gene tier to 1,2 based on Cosmic
@@ -936,11 +939,11 @@ if (length(vep_Nstruct_file)>0) {
   
   manta_normal_selected <- selection
   
-  kable(manta_normal_selected, "html") %>%
-  kable_styling(bootstrap_options = "striped",position = "left") %>%
-  column_spec(7, width = "20em") %>%
-  column_spec(9, width = "20em") %>%
-  scroll_box(width = "1400px", height = "600px")
+  kable(manta_normal_selected, "html") #%>%
+    #kable_styling(bootstrap_options = "striped",position = "left") %>%
+    #column_spec(7, width = "20em") %>%
+    #column_spec(9, width = "20em") %>%
+    #scroll_box(width = "1400px", height = "600px")
   
 }
 
@@ -971,20 +974,20 @@ if (exists('tstruc')) {
   ### TUMOR LOGRATIO  
   if (exists('tratio')) {
     g=g+geom_line(aes(x=cumstart,y=log2(Ratio)+2),
-                   data = tratio,alpha=1/3,
-                   stat="identity",colour="black")
+                  data = tratio,alpha=1/3,
+                  stat="identity",colour="black")
   } else if (exists('ascat_tratio')) {
     g=g+geom_line(aes(x=cumstart,y=log2(smoothed)),
-                   data = ascat_tratio,alpha=1/3,
-                   stat="identity",colour="black")
+                  data = ascat_tratio,alpha=1/3,
+                  stat="identity",colour="black")
   }
   ### NORMAL LOGRATIO  
   if (exists('nratio')) {
     g=g+geom_line(aes(x=cumstart,y=log2(Ratio)-1),
-                   data = nratio,alpha=1/3,
-                   stat="identity",colour="grey")
+                  data = nratio,alpha=1/3,
+                  stat="identity",colour="grey")
   }
-
+  
   # add chromosome labels
   g=g+geom_text(aes(x=starts+0.5*length,y=0,label=chr),data = chrsz,inherit.aes = F)
   # add the TUMOR structural variants
@@ -1006,12 +1009,12 @@ if (exists('tstruc')) {
                  inherit.aes = FALSE)
   # add TUMOR data afflicted cosmic genes
   g=g+geom_label_repel(mapping = aes(x = cumstart,y = 1.45,label=name),
-                      data = allgenes[name %in% manta_tumor_selected$SYMBOL[manta_tumor_selected$Gene_Tier<3]],
-                      size=2)
+                       data = allgenes[name %in% manta_tumor_selected$SYMBOL[manta_tumor_selected$Gene_Tier<3]],
+                       size=2)
   # add NORMAL data afflicted cosmic genes
   g=g+geom_label_repel(mapping = aes(x = cumstart,y = -1.55,label=name),
-                      data = allgenes[name %in% manta_normal_selected$SYMBOL[manta_normal_selected$Gene_Tier<3]],
-                      size=2)
+                       data = allgenes[name %in% manta_normal_selected$SYMBOL[manta_normal_selected$Gene_Tier<3]],
+                       size=2)
   
   g
 }
@@ -1038,6 +1041,7 @@ if (length(mutect2_file)>0) {
   tmuts$ref=as.character(ref(vcf))
   tmuts$alt=as.character(unlist(alt(vcf)))
   tmuts$type=paste0(tmuts$ref,'>',tmuts$alt)
+  tmuts$type[ix]=paste0(tmuts$ref,'>',tmuts$alt)
   tmuts$type[nchar(tmuts$ref)>nchar(tmuts$alt)]='del'
   tmuts$type[nchar(tmuts$ref)<nchar(tmuts$alt)]='ins'
   tmuts$type[nchar(tmuts$type)>3]='other'
@@ -1076,10 +1080,10 @@ if (length(mutect2_file)>0) {
   vep_header=strsplit(vep_header,'\\|')[[1]]
   
   
-    # keep only PASS
+  # keep only PASS
   tmuts=tmuts[filter=='PASS',]
   
-     ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
+  ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
   # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
   key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
   key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
@@ -1087,7 +1091,7 @@ if (length(mutect2_file)>0) {
   tmuts$allele1_swegen_count=key1_refAF$value
   remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
   tmuts <- tmuts[!remove,] # filtered.
-
+  
   
   # VEP annotation is put in annotation_table
   annotation_table=matrix(data = NA,nrow = nrow(tmuts),ncol = length(vep_header))
@@ -1111,7 +1115,7 @@ if (length(mutect2_file)>0) {
   polyphen_damaging=grep('damaging',mutect2_table$PolyPhen)
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',mutect2_table$SIFT)
-
+  
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious)))
   selection <- mutect2_table[
     keep,
@@ -1145,9 +1149,9 @@ if (length(mutect2_file)>0) {
   }
   mutect2_selected <- selection
   
-  kable(mutect2_selected, "html") %>%
-  kable_styling(bootstrap_options = "striped",position = "left") %>%
-  scroll_box(width = "1400px", height = "600px")
+  kable(mutect2_selected, "html") #%>%
+    #kable_styling(bootstrap_options = "striped",position = "left") %>%
+    #scroll_box(width = "1400px", height = "600px")
   
 }
 ```
@@ -1201,7 +1205,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # keep only PASS
   tmuts=tmuts[filter=='PASS',]
   
-   ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
+  ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
   # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
   key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
   key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
@@ -1209,7 +1213,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   tmuts$allele1_swegen_count=key1_refAF$value
   remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
   tmuts <- tmuts[!remove,] # filtered.
-
+  
   
   # VEP annotation is put in annotation_table
   annotation_table=matrix(data = NA,nrow = nrow(tmuts),ncol = length(vep_header))
@@ -1224,9 +1228,9 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   
   # Annotation table then concatenated 
   strelka_snvs=cbind(tmuts,annotation_table)
-
   
-    # Keep high/mod-relevance in final output
+  
+  # Keep high/mod-relevance in final output
   impact=which(strelka_snvs$IMPACT %in% c('HIGH','MODERATE'))
   # Also keep Clinvar-pathogenic
   clinvar_pathogenic=grep('pathogenic',strelka_snvs$CLIN_SIG)
@@ -1234,7 +1238,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   polyphen_damaging=grep('damaging',strelka_snvs$PolyPhen)
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',strelka_snvs$SIFT)
-
+  
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious)))
   selection <- strelka_snvs[
     keep,
@@ -1314,7 +1318,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # keep only PASS
   tmuts=tmuts[filter=='PASS',]
   
-   ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
+  ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
   # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
   key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
   key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
@@ -1338,7 +1342,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # Annotation table then concatenated 
   strelka_indels=cbind(tmuts,annotation_table)
   
-   
+  
   # Keep high/mod-relevance in final output
   impact=which(strelka_indels$IMPACT %in% c('HIGH','MODERATE'))
   # Also keep Clinvar-pathogenic
@@ -1347,7 +1351,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   polyphen_damaging=grep('damaging',strelka_indels$PolyPhen)
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',strelka_indels$SIFT)
-
+  
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious)))
   selection <- strelka_snvs[
     keep,
@@ -1381,9 +1385,9 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   }
   strelka_selected <- rbind(strelka_selected,selection)
   
-  kable(strelka_selected, "html") %>%
-  kable_styling(bootstrap_options = "striped",position = "left") %>%
-  scroll_box(width = "1000px", height = "600px")
+  kable(strelka_selected, "html") #%>%
+    #kable_styling(bootstrap_options = "striped",position = "left") %>%
+    #scroll_box(width = "1000px", height = "600px")
   
 }
 ```
@@ -1419,9 +1423,9 @@ if (exists('mutect2_table')) {
   # add smoothed
   # fix theme
   g=g+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                          axis.title.x=element_blank(),
-                          axis.text.x=element_blank(),
-                          axis.ticks.x=element_blank())
+            axis.title.x=element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank())
   # add chromosome lines
   g=g+geom_segment(mapping = aes(x = starts,xend=starts,y=0,yend=1),data=chrsz,inherit.aes = F,alpha=1/5)
   # add chromosome labels
@@ -1432,8 +1436,8 @@ if (exists('mutect2_table')) {
   g=g+geom_label_repel(data = temp,
                        mapping = aes(x=cumstart,y=TUMOR,label=paste(SYMBOL,Protein_position,Amino_acids)),
                        inherit.aes = F,size=2,nudge_y = 0.2)
-
-
+  
+  
   g
   # m=mutect2_table[,c('chr','start','end','ref','alt','AD','DP','ADn','DPn','Consequence','IMPACT','SYMBOL',
   #                    'BIOTYPE','EXON','Existing_variation','Protein_position','Amino_acids','Existing_variation')]
@@ -1479,7 +1483,7 @@ if (exists('strelka_indels') &
 if (exists('strelka_indels') &
     exists('strelka_snvs') &
     exists('mutect2_table')) {
-
+  
   VENN.LIST=list(mutect2=apply(X = mutect2_table[,c('chr','start','end','ref','alt'),],
                                MARGIN = 1,FUN = paste,collapse=' '),
                  strelka=apply(X = rbind(strelka_snvs[,c('chr','start','end','ref','alt'),],
@@ -1522,7 +1526,7 @@ if (length(haplotypecaller_N_file)>0) {
   t=unlist(temp$values[ix])
   nmuts$alt[ix]=t[seq(1,length(t),2)]
   nmuts$alt2[ix]=t[seq(2,length(t),2)]
- 
+  
   # # for each chr get cumulative pos
   for (i in 1:nrow(chrsz)) {
     ix=nmuts$chr==chrsz$chr[i]
@@ -1568,7 +1572,7 @@ if (length(haplotypecaller_N_file)>0) {
   nmuts$type=paste0(nmuts$ref,'>',nmuts$alt)
   nmuts$type[nchar(nmuts$ref)>nchar(nmuts$alt)]='del'
   nmuts$type[nchar(nmuts$ref)<nchar(nmuts$alt)]='ins'
-  nmuts$type[nchar(nmuts$type)>3]='other'
+  nmuts$type[nchar(nmuts$type)>3 | nmuts$alt2!='']=NA
   nmuts$type[nmuts$type=='T>G']='A>C'
   nmuts$type[nmuts$type=='T>C']='A>G'
   nmuts$type[nmuts$type=='T>A']='A>T'
@@ -1618,20 +1622,20 @@ if (length(haplotypecaller_N_file)>0) {
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',haplotypecaller_table$SIFT)
   # And certain effects
-  regulatory=c(grep('TF',haplotypecaller_table$Consequence),grep('regulatory',haplotypecaller_table$Consequence))
+  regulatory=c(grep('TF',haplotypecaller_table$Consequence),grep('regulatory',haplotypecaller_table$Consequence)) # <- not used below
   
-  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
-  selection <- haplotypecaller_table[keep,
-    .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
-      ref,alt,alt2,DP,DP_t,RD,RD_t,AD,AD_t,AD2,AD2_t,allele1_swegen_count,allele2_swegen_count)
-    ]
+  keep_haplotypecaller <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious))) #,regulatory
+  selection <- haplotypecaller_table[keep_haplotypecaller,
+                                     .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+                                       ref,alt,alt2,DP,DP_t,RD,RD_t,AD,AD_t,AD2,AD2_t,allele1_swegen_count,allele2_swegen_count)
+                                     ]
   for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
-
+  
   
   # Genes in census or local list considered T2, census Tier1 then gets T1
   selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
   selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
-    
+  
   # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
   selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
   temp=paste(selection$SYMBOL,selection$Protein_position)
@@ -1653,9 +1657,9 @@ if (length(haplotypecaller_N_file)>0) {
   
   haplotypecaller_selected <- selection
   
-  kable(haplotypecaller_selected, "html") %>%
-  kable_styling(bootstrap_options = "striped",position = "left") %>%
-  scroll_box(width = "1400px", height = "600px")
+  kable(haplotypecaller_selected, "html") #%>%
+    #kable_styling(bootstrap_options = "striped",position = "left") %>%
+    #scroll_box(width = "1400px", height = "600px")
   
 }
 ```
@@ -1666,45 +1670,45 @@ if (length(haplotypecaller_N_file)>0) {
 
 ### Write data files
 ```{r}
-  # export overlap with Mutect2 to new file:
-  vrA <- as(m2vcf, "VRanges")
-  vrB <- as(stvcf, "VRanges")
-  writeVcf(obj = vrA[vrA %in% vrB],filename = paste0(sampleData$name,'_forPatterns.vcf'))
-  #
-  # export bed file of all relevant genomic regions
-  write.table(
-    x = unique(rbind(
-      manta_tumor_table[,.(chr,start,end=start)],
-      manta_tumor_table[,.(chr,start=end,end)],
-      manta_tumor_table[!is.na(altpos),.(chr=altchr,start=altpos,end=altpos)],
-      manta_normal_table[,.(chr,start,end=start)],
-      manta_normal_table[,.(chr,start=end,end)],
-      manta_normal_table[!is.na(altpos),.(chr=altchr,start=altpos,end=altpos)],
-      mutect2_table[,.(chr,start,end)],
-      strelka_snvs[,.(chr,start,end)],
-      strelka_indels[,.(chr,start,end)],
-      haplotypecaller_table[,.(chr,start,end)])
-    ),
-    file = paste0(sampleData$name,'_forBamfile.bed'
-    ),
-    sep = '\t',row.names = F,col.names = F)
-  #
-  # export a data structure for downstream analysis
-  sampleList <- list(
-    nameHere=list(
-      sampleData=sampleData,
-      cnvs=cnvs,
-      ascat_cnv=ascat_cnv,
-      manta_normal_selected=manta_normal_selected,#manta_normal_table,
-      manta_tumor_selected=manta_tumor_selected,#manta_tumor_table,
-      mutect2_selected=mutect2_selected,#mutect2_table,
-      strelka_selected=strelka_selected,#strelka_indels,strelka_snvs,
-      haplotypecaller_selected=haplotypecaller_selected#,haplotypecaller_table # >2GB with the bid tables added
-    )
+# export overlap with Mutect2 to new file:
+vrA <- as(m2vcf, "VRanges")
+vrB <- as(stvcf, "VRanges")
+writeVcf(obj = vrA[vrA %in% vrB],filename = paste0(sampleData$name,'_forPatterns.vcf'))
+#
+# export bed file of all relevant genomic regions
+write.table(
+  x = unique(rbind(
+    manta_tumor_table[,.(chr,start,end=start)],
+    manta_tumor_table[,.(chr,start=end,end)],
+    manta_tumor_table[!is.na(altpos),.(chr=altchr,start=altpos,end=altpos)],
+    manta_normal_table[,.(chr,start,end=start)],
+    manta_normal_table[,.(chr,start=end,end)],
+    manta_normal_table[!is.na(altpos),.(chr=altchr,start=altpos,end=altpos)],
+    mutect2_table[,.(chr,start,end)],
+    strelka_snvs[,.(chr,start,end)],
+    strelka_indels[,.(chr,start,end)],
+    haplotypecaller_table[,.(chr,start,end)])
+  ),
+  file = paste0(sampleData$name,'_forBamfile.bed'
+  ),
+  sep = '\t',row.names = F,col.names = F)
+#
+# export a data structure for downstream analysis
+sampleList <- list(
+  nameHere=list(
+    sampleData=sampleData,
+    cnvs=cnvs,
+    ascat_cnv=ascat_cnv,
+    manta_normal_selected=manta_normal_selected,#manta_normal_table,
+    manta_tumor_selected=manta_tumor_selected,#manta_tumor_table,
+    mutect2_selected=mutect2_selected,#mutect2_table,
+    strelka_selected=strelka_selected,#strelka_indels,strelka_snvs,
+    haplotypecaller_selected=haplotypecaller_selected#,haplotypecaller_table # >2GB with the bid tables added
   )
-  names(sampleList)=sampleData$name
-  save(sampleList,file=paste0(sampleData$name,'_data.Rata'))
-  
+)
+names(sampleList)=sampleData$name
+save(sampleList,file=paste0(sampleData$name,'_data.Rata'))
+
 ```
 
 ### Combined view {.active}
@@ -1718,7 +1722,7 @@ print('TODO')
 chromplot=function(thischr) {
   par(mai=c(0,4,0,2))
   g=ggplot()+
-    scale_y_continuous(limits=c(-2.5,3),
+    scale_y_continuous(limits=c(-2.7,3),
                        breaks = seq(1.5,-2.5,-0.5),
                        minor_breaks = seq(1.25,-2.25,-0.5),
                        labels = 
@@ -1736,41 +1740,40 @@ chromplot=function(thischr) {
           axis.ticks.x=element_blank(),
           axis.title.y=element_blank(),
           axis.ticks.y=element_blank())#+
-
+  
   
   ### TUMOR LOGRATIO  
   if (exists('tratio')) {
     temp <- nratio
     temp$Ratio[temp$Ratio>3]=3
     g=g+geom_line(aes(x=Start,y=Ratio),
-                   data = temp[temp$Chromosome==thischr,],alpha=1/3,
-                   stat="identity",colour="red")
+                  data = temp[temp$Chromosome==thischr,],alpha=1/3,
+                  stat="identity",colour="red")
     temp <- tratio
     temp$Ratio[temp$Ratio>3]=3
     g=g+geom_line(aes(x=Start,y=Ratio),
-                   data = temp[temp$Chromosome==thischr,],alpha=2/3,
-                   stat="identity",colour="black")
-  }
-  else if (exists('ascat_tratio')) {
+                  data = temp[temp$Chromosome==thischr,],alpha=2/3,
+                  stat="identity",colour="black")
+  } else if (exists('ascat_tratio')) {
     temp <- ascat_tratio
     temp$smoothed[temp$smoothed>3]=3
     g=g+geom_line(aes(x=Position,y=smoothed),
-                   data = temp[temp$Chr==thischr,],alpha=1/3,
-                   stat="identity",colour="black")
+                  data = temp[temp$Chr==thischr,],alpha=1/3,
+                  stat="identity",colour="black")
   }
   
   ### TUMOR STRVAR  
   if (exists('tstruc')) {
     # first same chrom SVs
     temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr==tstruc$chr,]
-    if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=0.999,yend=1,col=SVTYPE,linetype=IMPRECISE),
+    if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=0.499,yend=0.5,col=SVTYPE,linetype=IMPRECISE),
                                      data = temp,alpha=1/2,
                                      curvature=-0.2,size=1,
                                      position = "identity", angle = 90, ncp = 50,
                                      arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
                                      inherit.aes = FALSE)+
-      scale_color_manual(values=c("BND"="#E41A1C", "DEL"="#377EB8", "INV"="#4DAF4A", "INS"="#984EA3", "DUP"="#FF7F00"))+
-      scale_linetype_manual(values=c('TRUE'=2,'FALSE'=1))
+        scale_color_manual(values=c("BND"="#E41A1C", "DEL"="#377EB8", "INV"="#4DAF4A", "INS"="#984EA3", "DUP"="#FF7F00"))+
+        scale_linetype_manual(values=c('TRUE'=2,'FALSE'=1))
     # then diff chrom SVs
     temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr!=tstruc$chr,]
     if (nrow(temp)>0) { 
@@ -1780,58 +1783,60 @@ chromplot=function(thischr) {
       #                                position = "identity", angle = 90, ncp = 50,
       #                                arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
       #                                inherit.aes = FALSE)
-      g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=1,label=alt),
+      g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=0.5,label=alt),
                            inherit.aes = F,size=3)
     }
-    
-    ### TUMOR MUTATIONS  
-    if (exists('mutect2_table')) {
-      temp=mutect2_table[chr==thischr & filter=='PASS' & Callers=='Mutect 2 and Strelka',]
-      if (nrow(temp)>0) { 
-        g=g+geom_point(aes(x=start,y=TUMOR -0.5,fill=type,shape=type),data = temp,alpha=1)+
-          scale_fill_manual(values = c("A>C"="#1B9E77","A>G"="#D95F02", "A>T"="#7570B3", "C>A"="#E7298A", "C>G"="#66A61E", "C>T"="#E6AB02", "del"="#A6761D", "ins"="#666666"))+
-          scale_shape_manual(values=c("A>C"=21,"A>G"=21, "A>T"=21, "C>A"=21, "C>G"=21, "C>T"=21, "del"=24, "ins"=25))#+
-        #scale_color_manual(values=c('<5'='lightgrey','≥5'='black'))
-        
-        g=g+geom_label_repel(data = temp[temp$Amino_acids!='',],
-                             mapping = aes(x=start,y=TUMOR -0.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
-                             inherit.aes = F,size=3,min.segment.length = 0,nudge_y = 0.3)
-      }
+  }
+  
+  ### TUMOR MUTATIONS  
+  if (exists('mutect2_table')) {
+    temp=mutect2_table[chr==thischr & filter=='PASS' & Callers=='Mutect 2 and Strelka',]
+    if (nrow(temp)>0) { 
+      g=g+geom_point(aes(x=start,y=TUMOR -0.5,fill=type,shape=type),data = temp,alpha=1)+
+        scale_fill_manual(values = c("A>C"="#1B9E77","A>G"="#D95F02", "A>T"="#7570B3", "C>A"="#E7298A", "C>G"="#66A61E", "C>T"="#E6AB02", "del"="#A6761D", "ins"="#666666"))+
+        scale_shape_manual(values=c("A>C"=21,"A>G"=21, "A>T"=21, "C>A"=21, "C>G"=21, "C>T"=21, "del"=24, "ins"=25))#+
+      #scale_color_manual(values=c('<5'='lightgrey','≥5'='black'))
+      
+      g=g+geom_label_repel(data = temp[temp$Amino_acids!='',],
+                           mapping = aes(x=start,y=TUMOR -0.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
+                           inherit.aes = F,size=3,min.segment.length = 0,nudge_y = 0.3)
     }
-    
-    ### SNPS + germline mutation (at the corresponding track)
-    if (exists('tbaf')) { 
-      g=g+geom_point(aes(x=Position,y=BAF -1.5),data = tbaf[tbaf$Chromosome==thischr,],alpha=1/8,shape='.')
-    } else if (exists('ascat_tbaf'))  {
-      g=g+geom_point(aes(x=Position,y=BAF -1.5),data = ascat_tbaf[ascat_tbaf$Chr==thischr,],alpha=1/8,shape='.')
-    }
-    if (exists('nbaf')) {
-      g=g+geom_point(aes(x=Position,y=BAF -2.5),data = nbaf[nbaf$Chromosome==thischr,],alpha=1/8,shape='.')
-    } else if (exists('ascat_nbaf')) {
-      g=g+geom_point(aes(x=Position,y=NBAF -2.5),data = ascat_nbaf[ascat_nbaf$Chr==thischr,],alpha=1/8,shape='.')
-    }
-    ## Germline muts
-    if (exists('haplotypecaller_table')) { 
-      g=g+
-        geom_point(aes(x=start,y=AF_t -1.5,fill=type,shape=type),
-                   data = haplotypecaller_table[chr==thischr],alpha=1)+
-        geom_label_repel(data = haplotypecaller_table[Amino_acids!='',],
-                         mapping = aes(x=start,y=AF_t -1.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
-                         inherit.aes = F,size=3,min.segment.length = 0,nudge_y = 0.3)
-      g=g+
-        geom_point(aes(x=start,y=AF -2.5,fill=type,shape=type),
-                   data = haplotypecaller_table[chr==thischr],alpha=1)+
-        geom_label_repel(data = haplotypecaller_table[Amino_acids!='',],
-                         mapping = aes(x=start,y=AF -2.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
-                         inherit.aes = F,size=3,min.segment.length = 0,nudge_y = 0.3)
-    }
-    
-    #genes!
-    temp=allgenes[name %in% tumorgenes$`Gene Symbol`]
-    g=g+geom_label_repel(mapping = aes(x = (cumstart+cumend)/2,y =  -2.5,label=name),
-                         data=allgenes[name %in% tumorgenes$`Gene Symbol`],
-                         nudge_y= -0.1,size=3)
-    return(g)
+  }
+  
+  ### SNPS + germline mutation (at the corresponding track)
+  if (exists('tbaf')) { 
+    g=g+geom_point(aes(x=Position,y=BAF -1.5),data = tbaf[tbaf$Chromosome==thischr,],alpha=1/8,shape='.')
+  } else if (exists('ascat_tbaf'))  {
+    g=g+geom_point(aes(x=Position,y=BAF -1.5),data = ascat_tbaf[ascat_tbaf$Chr==thischr,],alpha=1/8,shape='.')
+  }
+  if (exists('nbaf')) {
+    g=g+geom_point(aes(x=Position,y=BAF -2.5),data = nbaf[nbaf$Chromosome==thischr,],alpha=1/8,shape='.')
+  } else if (exists('ascat_nbaf')) {
+    g=g+geom_point(aes(x=Position,y=NBAF -2.5),data = ascat_nbaf[ascat_nbaf$Chr==thischr,],alpha=1/8,shape='.')
+  }
+  ## Germline muts
+  if (exists('haplotypecaller_table')) { 
+    temp=haplotypecaller_table[keep_haplotypecaller][chr==thischr]
+    g=g+
+      geom_point(aes(x=start,y=AF_t -1.5,fill=type,shape=type),
+                 data = temp,alpha=1)+
+      geom_label_repel(data = temp[Amino_acids!='',],
+                       mapping = aes(x=start,y=AF_t -1.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
+                       inherit.aes = F,size=3,min.segment.length = 0)
+    g=g+
+      geom_point(aes(x=start,y=AF -2.5,fill=type,shape=type),
+                 data = temp,alpha=1)+
+      geom_label_repel(data = temp[Amino_acids!='',],
+                       mapping = aes(x=start,y=AF -2.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
+                       inherit.aes = F,size=3,min.segment.length = 0)
+  }
+  
+  #genes!
+  temp=allgenes[name %in% tumorgenes$`Gene Symbol` & chr==thischr]
+  g=g+geom_text_repel(mapping = aes(x = (start+end)/2,y =  -2.6,label=name),
+                       data=temp,
+                       nudge_y= -0.1,size=2)
+  return(g)
 }
 ```
 
