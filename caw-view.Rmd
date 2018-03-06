@@ -20,7 +20,7 @@ knitr::opts_chunk$set(echo = FALSE,comment = '',warning=F,error = F)
 # {.tabset .tabset-pills}
 
 ```{r}
-cat('Sample:',basename(getwd()),'\tDirectory:',getwd(),'\tDate:',date())
+cat('Sample:',basename(getwd()),'\tDirectory:',getwd(),'\nDate:',date())
 ```
 
 ## Setup {.tabset}
@@ -31,12 +31,14 @@ cat('Sample:',basename(getwd()),'\tDirectory:',getwd(),'\tDate:',date())
 files <- dir(recursive = T,full.names = T)
 files <- files[-grep(pattern = '.png',x = files)]
 # control freec files
-freec_Tratio_file <- files[grep(pattern = 'T.hg38.pileup.gz_ratio.txt',files)]
-freec_Nratio_file <- files[grep(pattern = 'T.hg38.pileup.gz_normal_ratio.txt',files)]
-freec_Tbaf_file <- files[grep(pattern = 'T.hg38.pileup.gz_BAF.txt',files)]
-freec_Nbaf_file <- files[grep(pattern = 'B.hg38.pileup.gz_BAF.txt',files)]
-freec_info_file <- files[grep(pattern = 'hg38.pileup.gz_info.txt',files)]
-freec_cnv_file <- files[grep(pattern = glob2rx('*T.hg38.pileup.gz_CNVs'),files)]
+freec_Tratio_file <- files[grep(pattern = 'T.hg38.pileup.gz_ratio.txt',files)][1]
+freec_Nratio_file <- files[grep(pattern = 'T.hg38.pileup.gz_normal_ratio.txt',files)][1]
+freec_Tbaf_file <- files[grep(pattern = 'T.hg38.pileup.gz_BAF.txt',files)][1]
+freec_Nbaf_file <- files[grep(pattern = 'B.hg38.pileup.gz_BAF.txt',files)][1]
+if (is.na(freec_Nbaf_file)) 
+  freec_Nbaf_file <- files[grep(pattern = 'N.hg38.pileup.gz_BAF.txt',files)][1]
+freec_info_file <- files[grep(pattern = 'hg38.pileup.gz_info.txt',files)][1]
+freec_cnv_file <- files[grep(pattern = glob2rx('*T.hg38.pileup.gz_CNVs'),files)][1]
 # Ascat files
 ascat_Tratio_file <- files[grep(pattern = glob2rx("*Ascat*T.LogR"),files)]
 ascat_Nratio_file <- files[grep(pattern = glob2rx("*Ascat*N.LogR"),files)]
@@ -44,8 +46,8 @@ ascat_Tbaf_file <- files[grep(pattern = glob2rx("*Ascat*T.BAF"),files)]
 ascat_Nbaf_file <- files[grep(pattern = glob2rx("*Ascat*N.BAF"),files)]
 ascat_segment_file <- files[grep(pattern = glob2rx("*Ascat*T.cnvs.txt"),files)]
 # Manta structural variant files (VEP here)
-vep_Tstruct_file <- grep(pattern = glob2rx("*VEP/Manta*somaticSV.*ann.vcf"),files,value = T)
-vep_Nstruct_file <- grep(pattern = glob2rx("*VEP/Manta*diploidSV.*ann.vcf"),files,value = T)
+vep_Tstruct_file <- grep(pattern = glob2rx("*VEP/Manta*vs*somaticSV.*ann.vcf"),files,value = T)
+vep_Nstruct_file <- grep(pattern = glob2rx("*VEP/Manta*vs*diploidSV.*ann.vcf"),files,value = T)
 # Haplotype caller variant files
 haplotypecaller_T_file <- grep(pattern = glob2rx("*VEP/haplotypecaller*T.vcf.vep.ann.vcf"),files,value = T) # local
 if (length(haplotypecaller_T_file)==0)
@@ -56,15 +58,15 @@ if (length(haplotypecaller_N_file)==0)
 # snpEff+VEP Mutect2 file
 mutect2_file <- grep(pattern = glob2rx("*/Annotation/mutect2_*canon.vep.ann.pick.PASS.recode.vcf"),files,value = T) # <- local
 if (length(mutect2_file)==0)
-  mutect2_file <- grep(pattern = glob2rx("*Annotation/VEP/mutect2_*.vcf.vep.ann.PASS.recode.vcf"),files,value = T) # <- bianca
+  mutect2_file <- grep(pattern = glob2rx("*Annotation/VEP/mutect2_*.vcf.vep.ann*.vcf"),files,value = T)[1] # <- bianca
 # snpEff + VEP Strelka snv file
 strelka_snv_file <- grep(pattern = glob2rx("*/Annotation/Strelka_*somatic_snvs.snpeff.ann.canon.vep.ann.pick.vcf"),files,value = T) # <- local
 if (length(strelka_snv_file)==0)
-  strelka_snv_file <- grep(pattern = glob2rx("*Annotation/VEP/Strelka_*_somatic_snvs.vcf.vep.ann.PASS.recode.vcf"),files,value = T) # <- bianca
+  strelka_snv_file <- grep(pattern = glob2rx("*Annotation/VEP/Strelka_*_somatic_snvs.vcf.vep.ann*.vcf"),files,value = T)[1] # <- bianca
 # snpEff + VEP Strelka indel file
 strelka_indel_file <- grep(pattern = glob2rx("*/Annotation/Strelka_*somatic_indels.snpeff.ann.canon.vep.ann.pick.vcf"),files,value = T) # <- local
 if (length(strelka_indel_file)==0)
-  strelka_indel_file <- grep(pattern = glob2rx("*Annotation/VEP/Strelka_*_somatic_indels.vcf.vep.ann.PASS.recode.vcf"),files,value = T) # <- bianca
+  strelka_indel_file <- grep(pattern = glob2rx("*Annotation/VEP/Strelka_*_somatic_indels.vcf.vep.ann*.vcf"),files,value = T)[1] # <- bianca
 
 rm(files)
 {
@@ -95,6 +97,7 @@ library(ggrepel)
 library(VariantAnnotation)
 library(VennDiagram)
 library(knitr)
+library(htmlTable)
 #library(kableExtra)
 
 listfix <- function(list) {
@@ -123,6 +126,7 @@ load('~/reports/BTB_hg38_manta_counts.Rdata') #  btb_hg38_manta
 ### ControlFreec
 <!-- Read Control Freec copy number data -->
 ```{r}
+cnvs=NULL
 if (length(freec_Tratio_file)>0 &
     length(freec_Nratio_file)>0 &
     length(freec_Tbaf_file)>0 &
@@ -199,7 +203,7 @@ if (length(freec_Tratio_file)>0 &
   
   # check which regions are worth reporting
   # cnv file
-  cnvs <- fread(freec_cnv_file)
+  cnvs <- as.data.table(read.csv(freec_cnv_file,sep='\t',header=F))
   names(cnvs) <- c('chr','start','end','copies','effect','genotype','value','type','na')
   cnvs$Gene_Tier <- 3
   cnvs$Effect_Tier <- 3
@@ -230,9 +234,9 @@ if (length(freec_Tratio_file)>0 &
     }
   }
   
-  kable(cnvs, "html") #%>%
-    #kable_styling(bootstrap_options = "striped",position = "left") %>%
-    #scroll_box(width = "1400px", height = "600px")# %>%
+  htmlTable(cnvs, col.rgroup = c("none", "#F7F7F7")) #%>%
+  #kable_styling(bootstrap_options = "striped",position = "left") %>%
+  #scroll_box(width = "1400px", height = "600px")# %>%
   # row_spec(row = which(cnvs$Gene_Tier==2 | cnvs$Effect_Tier==2), background = "#FF500040") %>%
   # row_spec(row = which(cnvs$Gene_Tier==1 | cnvs$Effect_Tier==1), background = "#FFFF0040") %>%
   # row_spec(row = which(cnvs$Gene_Tier==1 & cnvs$Effect_Tier==1), background = "#00FF0040")
@@ -243,7 +247,8 @@ if (length(freec_Tratio_file)>0 &
 
 ### Ascat
 <!-- Read ASCAT copy number data -->
-```{r,echo=F,include=F}
+```{r}
+ascat_cnv=NULL
 if (length(ascat_Tratio_file)>0 &
     length(ascat_Nratio_file)>0 &
     length(ascat_Tbaf_file)>0 &
@@ -368,9 +373,9 @@ if (length(ascat_Tratio_file)>0 &
       }
     }
   }
-  kable(ascat_cnv, "html") #%>%
-    #kable_styling(bootstrap_options = "striped",position = "left") %>%
-    #scroll_box(width = "1400px", height = "600px")
+  htmlTable(ascat_cnv, col.rgroup = c("none", "#F7F7F7")) #%>%
+  #kable_styling(bootstrap_options = "striped",position = "left") %>%
+  #scroll_box(width = "1400px", height = "600px")
 }
 ```
 
@@ -425,9 +430,8 @@ if (exists('tratio')) {
 
 #### Scatter plot
 <!-- Scatter plot -->
-```{r, echo=FALSE,,fig.width=8,fig.height=4,warning=F}
+```{r, echo=FALSE,fig.width=8,fig.height=4,warning=F}
 if (exists('binned')) {
-  cat('Control freec:')
   binned$tmaf[binned$tmaf<0]=1
   g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.5,1.5))+
     geom_point(aes(x = tratio,y = tmaf,col=chr),data=binned[binned$tratio<1.8,])+
@@ -491,9 +495,8 @@ if (exists('ascat_tratio')) {
 
 #### Scatter plot
 <!-- Scatter plot -->
-```{r, echo=FALSE,,fig.width=8,fig.height=4,warning=F}
+```{r, echo=FALSE,fig.width=8,fig.height=4,warning=F}
 if (exists('ascat_binned')) {
-  cat('Ascat:')
   #ascat_binned$tmaf[ascat_binned$tmaf<0]=1
   g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.5,1.5))+
     geom_point(aes(x = tratio,y = tmaf,col=chr),data=ascat_binned[ascat_binned$tratio<1.8,])+
@@ -723,11 +726,11 @@ if (length(vep_Tstruct_file)>0) {
   
   manta_tumor_selected <- selection
   
-  kable(manta_tumor_selected, "html") #%>%
-    #kable_styling(bootstrap_options = "striped",position = "left") %>%
-    #column_spec(7, width = "20em") %>%
-    #column_spec(9, width = "20em") %>%
-    #scroll_box(width = "1400px", height = "600px")
+  htmlTable(manta_tumor_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
+  #kable_styling(bootstrap_options = "striped",position = "left") %>%
+  #column_spec(7, width = "20em") %>%
+  #column_spec(9, width = "20em") %>%
+  #scroll_box(width = "1400px", height = "600px")
 }
 ```
 
@@ -939,11 +942,11 @@ if (length(vep_Nstruct_file)>0) {
   
   manta_normal_selected <- selection
   
-  kable(manta_normal_selected, "html") #%>%
-    #kable_styling(bootstrap_options = "striped",position = "left") %>%
-    #column_spec(7, width = "20em") %>%
-    #column_spec(9, width = "20em") %>%
-    #scroll_box(width = "1400px", height = "600px")
+  htmlTable(manta_normal_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
+  #kable_styling(bootstrap_options = "striped",position = "left") %>%
+  #column_spec(7, width = "20em") %>%
+  #column_spec(9, width = "20em") %>%
+  #scroll_box(width = "1400px", height = "600px")
   
 }
 
@@ -956,7 +959,7 @@ if (length(vep_Nstruct_file)>0) {
 <!-- Plot the tumor and normal (also showing copy number) structural variant data -->
 ### View structural variants {.active}
 ```{r, echo=FALSE,fig.width=15,fig.height=8}
-cat(vep_Tstruct_file)
+cat(vep_Tstruct_file,'\n',vep_Nstruct_file)
 if (exists('tstruc')) {
   par(mai=c(0,4,0,2))
   g=ggplot()+ylab('Structural variants')+expand_limits(x=c(0,3210e6))+ylim(-4,4)
@@ -991,30 +994,33 @@ if (exists('tstruc')) {
   # add chromosome labels
   g=g+geom_text(aes(x=starts+0.5*length,y=0,label=chr),data = chrsz,inherit.aes = F)
   # add the TUMOR structural variants
-  g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=1.499,yend=1.5,col=SVTYPE,linetype=IMPRECISE),
-                 data = unique(manta_tumor_table[,.(cumstart,altcumpos,SVTYPE,IMPRECISE)]),alpha=1/2,
-                 stat = "identity",curvature=-0.2,size=0.5,
-                 position = "identity", angle = 90, ncp = 10,
-                 arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
-                 inherit.aes = FALSE)+
+  temp=unique(manta_tumor_table[,.(cumstart,altcumpos,SVTYPE,IMPRECISE)])
+  if (nrow(temp)>0) g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=1.499,yend=1.5,col=SVTYPE,linetype=IMPRECISE),
+                                   data = temp,alpha=1/2,
+                                   stat = "identity",curvature=-0.2,size=0.5,
+                                   position = "identity", angle = 90, ncp = 10,
+                                   arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
+                                   inherit.aes = FALSE)+
     scale_color_manual(values=c("BND"="#E41A1C", "DEL"="#377EB8", "INV"="#4DAF4A", "INS"="#984EA3", "DUP"="#FF7F00"))+
     scale_linetype_manual(values=c('TRUE'=2,'FALSE'=1))
   # add the NORMAL structural variants
-  g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=-1.499,yend=-1.5,col=SVTYPE,linetype=IMPRECISE),
-                 data = unique(manta_normal_table[THISID %in% manta_normal_selected[Gene_Tier<3,ID],
-                                                  .(cumstart,altcumpos,SVTYPE,IMPRECISE)]),alpha=1/2,
-                 stat = "identity",curvature=-0.2,size=0.5,
-                 position = "identity", angle = 90, ncp = 10,
-                 arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
-                 inherit.aes = FALSE)
+  temp=unique(manta_normal_table[THISID %in% manta_normal_selected[Gene_Tier<3,ID],.(cumstart,altcumpos,SVTYPE,IMPRECISE)])
+  if (nrow(temp)>0) g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=-1.499,yend=-1.5,col=SVTYPE,linetype=IMPRECISE),
+                                   data = temp,alpha=1/2,
+                                   stat = "identity",curvature=-0.2,size=0.5,
+                                   position = "identity", angle = 90, ncp = 10,
+                                   arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
+                                   inherit.aes = FALSE)
   # add TUMOR data afflicted cosmic genes
-  g=g+geom_label_repel(mapping = aes(x = cumstart,y = 1.45,label=name),
-                       data = allgenes[name %in% manta_tumor_selected$SYMBOL[manta_tumor_selected$Gene_Tier<3]],
-                       size=2)
+  temp=allgenes[name %in% manta_tumor_selected$SYMBOL[manta_tumor_selected$Gene_Tier<3]]
+  if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = cumstart,y = 1.45,label=name),
+                                         data = temp,
+                                         size=2)
   # add NORMAL data afflicted cosmic genes
-  g=g+geom_label_repel(mapping = aes(x = cumstart,y = -1.55,label=name),
-                       data = allgenes[name %in% manta_normal_selected$SYMBOL[manta_normal_selected$Gene_Tier<3]],
-                       size=2)
+  temp=allgenes[name %in% manta_normal_selected$SYMBOL[manta_normal_selected$Gene_Tier<3]]
+  if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = cumstart,y = -1.55,label=name),
+                                         data = temp,
+                                         size=2)
   
   g
 }
@@ -1041,7 +1047,6 @@ if (length(mutect2_file)>0) {
   tmuts$ref=as.character(ref(vcf))
   tmuts$alt=as.character(unlist(alt(vcf)))
   tmuts$type=paste0(tmuts$ref,'>',tmuts$alt)
-  tmuts$type[ix]=paste0(tmuts$ref,'>',tmuts$alt)
   tmuts$type[nchar(tmuts$ref)>nchar(tmuts$alt)]='del'
   tmuts$type[nchar(tmuts$ref)<nchar(tmuts$alt)]='ins'
   tmuts$type[nchar(tmuts$type)>3]='other'
@@ -1147,11 +1152,11 @@ if (length(mutect2_file)>0) {
       if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
     }
   }
-  mutect2_selected <- selection
+  mutect2_selected <- selection[order(Effect_Tier,Gene_Tier)]
   
-  kable(mutect2_selected, "html") #%>%
-    #kable_styling(bootstrap_options = "striped",position = "left") %>%
-    #scroll_box(width = "1400px", height = "600px")
+  htmlTable(mutect2_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
+  #kable_styling(bootstrap_options = "striped",position = "left") %>%
+  #scroll_box(width = "1400px", height = "600px")
   
 }
 ```
@@ -1290,7 +1295,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   tmuts$type=paste0(tmuts$ref,'>',tmuts$alt)
   tmuts$type[nchar(tmuts$ref)>nchar(tmuts$alt)]='del'
   tmuts$type[nchar(tmuts$ref)<nchar(tmuts$alt)]='ins'
-  tmuts$type[nchar(tmuts$type)>3]='other'
+  tmuts$type[nchar(tmuts$type)>3]=NA
   tmuts$type[tmuts$type=='T>G']='A>C'
   tmuts$type[tmuts$type=='T>C']='A>G'
   tmuts$type[tmuts$type=='T>A']='A>T'
@@ -1383,11 +1388,11 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
       if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
     }
   }
-  strelka_selected <- rbind(strelka_selected,selection)
+  strelka_selected <- rbind(strelka_selected,selection)[order(Effect_Tier,Gene_Tier)]
   
-  kable(strelka_selected, "html") #%>%
-    #kable_styling(bootstrap_options = "striped",position = "left") %>%
-    #scroll_box(width = "1000px", height = "600px")
+  htmlTable(strelka_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
+  #kable_styling(bootstrap_options = "striped",position = "left") %>%
+  #scroll_box(width = "1000px", height = "600px")
   
 }
 ```
@@ -1398,7 +1403,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
 
 #### Genome view
 ```{r, echo=FALSE,fig.width=15,fig.height=6}
-cat(mutect2_file)
+cat(mutect2_file,strelka_indel_file,strelka_snv_file,sep = '\n')
 if (exists('mutect2_table')) {
   par(mai=c(1,4,0,2))
   
@@ -1657,9 +1662,9 @@ if (length(haplotypecaller_N_file)>0) {
   
   haplotypecaller_selected <- selection
   
-  kable(haplotypecaller_selected, "html") #%>%
-    #kable_styling(bootstrap_options = "striped",position = "left") %>%
-    #scroll_box(width = "1400px", height = "600px")
+  htmlTable(haplotypecaller_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
+  #kable_styling(bootstrap_options = "striped",position = "left") %>%
+  #scroll_box(width = "1400px", height = "600px")
   
 }
 ```
@@ -1673,7 +1678,7 @@ if (length(haplotypecaller_N_file)>0) {
 # export overlap with Mutect2 to new file:
 vrA <- as(m2vcf, "VRanges")
 vrB <- as(stvcf, "VRanges")
-writeVcf(obj = vrA[vrA %in% vrB],filename = paste0(sampleData$name,'_forPatterns.vcf'))
+writeVcf(obj = vrA[vrA %in% vrB],filename = paste0('~/reports/',sampleData$name,'_forPatterns.vcf'))
 #
 # export bed file of all relevant genomic regions
 write.table(
@@ -1689,7 +1694,7 @@ write.table(
     strelka_indels[,.(chr,start,end)],
     haplotypecaller_table[,.(chr,start,end)])
   ),
-  file = paste0(sampleData$name,'_forBamfile.bed'
+  file = paste0('~/reports/',sampleData$name,'_forBamfile.bed'
   ),
   sep = '\t',row.names = F,col.names = F)
 #
@@ -1707,7 +1712,7 @@ sampleList <- list(
   )
 )
 names(sampleList)=sampleData$name
-save(sampleList,file=paste0(sampleData$name,'_data.Rata'))
+save(sampleList,file=paste0('~/reports/',sampleData$name,'_data.Rata'))
 
 ```
 
@@ -1720,6 +1725,7 @@ print('TODO')
 <!-- Plot composite data, chromosome wise -->
 ```{r}
 chromplot=function(thischr) {
+  #  try( { 
   par(mai=c(0,4,0,2))
   g=ggplot()+
     scale_y_continuous(limits=c(-2.7,3),
@@ -1763,7 +1769,7 @@ chromplot=function(thischr) {
   }
   
   ### TUMOR STRVAR  
-  if (exists('tstruc')) {
+  if (exists('tstruc')) if (nrow(tstruc)>0) {
     # first same chrom SVs
     temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr==tstruc$chr,]
     if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=0.499,yend=0.5,col=SVTYPE,linetype=IMPRECISE),
@@ -1777,19 +1783,13 @@ chromplot=function(thischr) {
     # then diff chrom SVs
     temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr!=tstruc$chr,]
     if (nrow(temp)>0) { 
-      # g=g+geom_curve(aes(x = start,xend = start,y=1.499,yend=1.5,col=SVTYPE,linetype=IMPRECISE),
-      #                                data = temp,alpha=1/2,
-      #                                curvature=-0.2,size=1,
-      #                                position = "identity", angle = 90, ncp = 50,
-      #                                arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
-      #                                inherit.aes = FALSE)
       g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=0.5,label=alt),
                            inherit.aes = F,size=3)
     }
   }
   
   ### TUMOR MUTATIONS  
-  if (exists('mutect2_table')) {
+  if (exists('mutect2_table')) if (nrow(mutect2_table)>0) {
     temp=mutect2_table[chr==thischr & filter=='PASS' & Callers=='Mutect 2 and Strelka',]
     if (nrow(temp)>0) { 
       g=g+geom_point(aes(x=start,y=TUMOR -0.5,fill=type,shape=type),data = temp,alpha=1)+
@@ -1834,9 +1834,11 @@ chromplot=function(thischr) {
   #genes!
   temp=allgenes[name %in% tumorgenes$`Gene Symbol` & chr==thischr]
   g=g+geom_text_repel(mapping = aes(x = (start+end)/2,y =  -2.6,label=name),
-                       data=temp,
-                       nudge_y= -0.1,size=2)
+                      data=temp,
+                      nudge_y= -0.1,size=2)
   return(g)
+  
+  #}, silent=T)
 }
 ```
 
