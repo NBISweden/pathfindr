@@ -4,10 +4,13 @@
 # biocLite: refgenomet
 
 
-library(refgenomet)
-library(mutpatterns)
+library(BSgenome.Hsapiens.UCSC.hg38)
+library(MutationalPatterns)
 
-vcf=read_vcfs_as_granges('Data/BTBdata/Annotation/Strelka_P2233_103T_vs_P2233_122N_somatic_snvs.snpeff.ann.canon.vep.ann.pick.PASS.recode.vcf',genome = 'BSgenome.Hsapiens.UCSC.hg38',sample_names = 'test')
+setwd('~/Data/BTBdata/Mutational patterns/')
+files=dir(pattern = 'vcf')
+
+vcf=read_vcfs_as_granges(files,genome = 'BSgenome.Hsapiens.UCSC.hg38',sample_names = substr(files,1,21))
 
 type_occurrences=mut_type_occurrences(vcf,'BSgenome.Hsapiens.UCSC.hg38')
 
@@ -40,16 +43,14 @@ plot(hclust_cosmic)
 cos_sim(mut_mat[,1], cancer_signatures[,1])
 
 #Calculate pairwise cosine similarity between mutational profiles and COSMIC signatures:
-cos_sim_samples_signatures = rbind(cos_sim_matrix(mut_mat, cancer_signatures),cos_sim_matrix(mut_mat, cancer_signatures))# made a dummy copy
-rownames(cos_sim_samples_signatures)[2]='test2'
-plot_cosine_heatmap(cos_sim_samples_signatures,col_order = cosmic_order,cluster_rows = TRUE) # needs >1 samples
+plot_cosine_heatmap(cancer_signatures,col_order = cosmic_order,cluster_rows = TRUE)
 
 #Fit mutation matrix to the COSMIC mutational signatures:
 fit_res <- fit_to_signatures(mut_mat, cancer_signatures)
 
 # Plot contribution barplot
 select <- which(rowSums(fit_res$contribution) > 10)
-plot_contribution(fit_res$contribution[select,],cancer_signatures[,select],coord_flip = FALSE,mode = "absolute") # this will likely work once all data has been collected....
+plot_contribution(fit_res$contribution[select,],cancer_signatures[,select],coord_flip = TRUE,mode = "absolute") # this will likely work once all data has been collected....
 
 
 

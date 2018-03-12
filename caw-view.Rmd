@@ -12,6 +12,22 @@ editor_options:
 
 <!-- This script reads from a folder containing CAW (aka Sarek) output, including copy number data from ControlFreec and Ascat, structural variation from Manta, somatic point mutations from Mutact 2 and Strelka, and germline mutations from HaplotypeCaller.-->
 
+<!-- CSS style for tables to look ok: -->
+<style>
+
+table, td, th {
+  border: none;
+  padding-left: 1em;
+  padding-right: 1em;
+  min-width: 50%;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+
+</style>
+
 <!-- Markdown setup -->
 ```{r setup, include=F}
 knitr::opts_chunk$set(echo = FALSE,comment = '',warning=F,error = F)
@@ -1678,7 +1694,7 @@ if (length(haplotypecaller_N_file)>0) {
 # export overlap with Mutect2 to new file:
 vrA <- as(m2vcf, "VRanges")
 vrB <- as(stvcf, "VRanges")
-writeVcf(obj = vrA[vrA %in% vrB],filename = paste0('~/reports/',sampleData$name,'_forPatterns.vcf'))
+writeVcf(obj = vrA[vrA %in% vrB & rowRanges(m2vcf)$FILTER=='PASS'],filename = paste0('~/reports/',sampleData$name,'_forPatterns.vcf'))
 #
 # export bed file of all relevant genomic regions
 write.table(
@@ -1724,7 +1740,7 @@ print('TODO')
 ## Chromosomes {.tabset}
 <!-- Plot composite data, chromosome wise -->
 ```{r}
-chromplot=function(thischr) {
+chromplot=function(thischr) if (F) {
   #  try( { 
   par(mai=c(0,4,0,2))
   g=ggplot()+
