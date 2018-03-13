@@ -61,9 +61,10 @@ ascat_Nratio_file <- files[grep(pattern = glob2rx("*Ascat*N.LogR"),files)]
 ascat_Tbaf_file <- files[grep(pattern = glob2rx("*Ascat*T.BAF"),files)]
 ascat_Nbaf_file <- files[grep(pattern = glob2rx("*Ascat*N.BAF"),files)]
 ascat_segment_file <- files[grep(pattern = glob2rx("*Ascat*T.cnvs.txt"),files)]
-# Manta structural variant files (VEP here)
-vep_Tstruct_file <- grep(pattern = glob2rx("*VEP/Manta*vs*somaticSV.*ann.vcf"),files,value = T)
-vep_Nstruct_file <- grep(pattern = glob2rx("*VEP/Manta*vs*diploidSV.*ann.vcf"),files,value = T)
+# Manta structural variant files
+vep_Tstruct_file <- grep(pattern = glob2rx("*VEP/Manta*vs*somaticSV.*ann*.vcf"),files,value = T)[1]
+vep_Nstruct_file <- grep(pattern = glob2rx("*VEP/Manta*vs*diploidSV.*ann*.vcf"),files,value = T)[1]
+
 # Haplotype caller variant files
 haplotypecaller_T_file <- grep(pattern = glob2rx("*VEP/haplotypecaller*T.vcf.vep.ann.vcf"),files,value = T) # local
 if (length(haplotypecaller_T_file)==0)
@@ -226,7 +227,7 @@ if (length(freec_Tratio_file)>0 &
   cnvs$cosmic_genes <- ''
   cnvs$all_genes=''
   # amplifications/duplications max 5MB, homdel max 3MB
-  cnvs <- cnvs[(end-start < 5e6 & effect=='gain') | (end-start < 3e6 & copies==0)]
+  cnvs <- cnvs#[(end-start < 5e6 & effect=='gain') | (end-start < 3e6 & copies==0)]
   # add genes 
   for (i in 1:nrow(cnvs)) {
     all=allgenes[chr==cnvs$chr[i] & start<cnvs$end[i] & end>cnvs$start[i],name]
@@ -366,7 +367,7 @@ if (length(ascat_Tratio_file)>0 &
   ascat_cnv$cosmic_genes <- ''
   #ascat_cnv$all_genes=''
   # amplifications/duplications max 5MB, homdel max 3MB
-  ascat_cnv <- ascat_cnv[(endpos-startpos < 5e6 & nMajor+nMinor > 4) | (endpos-startpos < 3e6 & nMajor==0)]
+  ascat_cnv <- ascat_cnv#[(endpos-startpos < 5e6 & nMajor+nMinor > 4) | (endpos-startpos < 3e6 & nMajor==0)]
   # add genes 
   for (i in 1:nrow(ascat_cnv)) {
     all=allgenes[chr==ascat_cnv$chr[i] & start<ascat_cnv$endpos[i] & end>ascat_cnv$startpos[i],name]
@@ -603,31 +604,47 @@ if (length(vep_Tstruct_file)>0) {
     tstruc$altcumpos[ix]=tstruc$altpos[ix]+chrsz$starts[i]
   }
   
-  
-  
-  
-  # annotation is in the CSQ column.
+  # VEP annotation is in the CSQ column.
   h=strsplit(info(header(tstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
   vep_header=strsplit(h,'\\|')[[1]]
-  
-  # VEP annotation is put in annotation_table
-  annotation_table=matrix(data = NA,nrow = length(unlist(tstruc$CSQ)),ncol = length(vep_header)+1)
-  colnames(annotation_table)=c('N',vep_header)
+
+  # VEP annotation is put in vep_table
+  vep_table=matrix(data = NA,nrow = length(unlist(tstruc$CSQ)),ncol = length(vep_header)+1)
+  colnames(vep_table)=c('N',vep_header)
   row=1
   for (i in 1:nrow(tstruc)) { # for each variant
     # for each VEP annotation:
-    for (j in 1:length(tstruc$CSQ[[i]])) { 
+    for (j in 1:length(tstruc$CSQ[[i]])) {
       line=strsplit(tstruc$CSQ[[i]][j],'\\|')[[1]]
-      annotation_table[row,1]=i
-      annotation_table[row,1+(1:length(line))]=line
+      vep_table[row,1]=i
+      vep_table[row,1+(1:length(line))]=line
       row=row+1
     }
   }
-  annotation_table=as.data.table(annotation_table)
+  vep_table=as.data.table(vep_table)
   
+  # # snpEff annotation is in the ANN column.
+  # h=strsplit(info(header(tstruc_vcf))['ANN',][,3],'annotations: \'')[[1]][2]
+  # snpEff_header=trimws(strsplit(h,'\\|')[[1]])
+  # 
+  # # snpEff annotation is put in snpEff_table
+  # snpEff_table=matrix(data = NA,nrow = length(unlist(tstruc$ANN)),ncol = length(snpEff_header)+1)
+  # colnames(snpEff_table)=c('N',snpEff_header)
+  # row=1
+  # for (i in 1:nrow(tstruc)) { # for each variant
+  #   # for each VEP annotation:
+  #   for (j in 1:length(tstruc$ANN[[i]])) { 
+  #     line=strsplit(tstruc$ANN[[i]][j],'\\|')[[1]]
+  #     snpEff_table[row,1]=i
+  #     snpEff_table[row,1+(1:length(line))]=line
+  #     row=row+1
+  #   }
+  # }
+  # snpEff_table=as.data.table(snpEff_table)
+    
   # Add to data
   tstruc$N=as.character(1:nrow(tstruc))
-  manta_tumor_table <- merge(tstruc,annotation_table,by='N')[order(cumstart),-1]
+  manta_tumor_table <- merge(tstruc,vep_table,by='N')[order(cumstart),-1]
   
   # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
   del_ok <- which(manta_tumor_table$SVTYPE=='DEL' & abs(manta_tumor_table$SVLEN)<3e6)
@@ -1093,13 +1110,13 @@ if (length(mutect2_file)>0) {
   tmuts$reads[tmuts$AD>=5]='≥5'
   # "info"" annotations also need to be added
   tmuts=cbind(tmuts,as.data.table(info(vcf)))
+
   ## get snpEff headers
-  #snpeff_header=strsplit(info(header(vcf))['ANN',][,3],'ions: \'')[[1]][2]
-  #snpeff_header=strsplit(snpeff_header,' \\| ')[[1]]
+  snpeff_header=strsplit(info(header(vcf))['ANN',][,3],'ions: \'')[[1]][2]
+  snpeff_header=strsplit(snpeff_header,' \\| ')[[1]]
   ## get VEP headers
   vep_header=strsplit(info(header(vcf))['CSQ',][,3],'Format: ')[[1]][2]
   vep_header=strsplit(vep_header,'\\|')[[1]]
-  
   
   # keep only PASS
   tmuts=tmuts[filter=='PASS',]
@@ -1125,6 +1142,8 @@ if (length(mutect2_file)>0) {
     }
   }
   
+
+  
   # Annotation table then concatenated 
   mutect2_table=cbind(tmuts,annotation_table)
   
@@ -1136,11 +1155,15 @@ if (length(mutect2_file)>0) {
   polyphen_damaging=grep('damaging',mutect2_table$PolyPhen)
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',mutect2_table$SIFT)
+  # And certain effects
+  regulatory=c(grep('TF',mutect2_table$Consequence))#,grep('regulatory',mutect2_table$Consequence)) # <-  used below?
+
   
-  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious)))
+  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- mutect2_table[
     keep,
     .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+      MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
       ref,alt,DP,AD,DPn,ADn,allele1_swegen_count)
     ]
   if (nrow(selection)>0) {
@@ -1259,11 +1282,15 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   polyphen_damaging=grep('damaging',strelka_snvs$PolyPhen)
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',strelka_snvs$SIFT)
+   # And certain effects
+  regulatory=c(grep('TF',strelka_snvs$Consequence))#,grep('regulatory',strelka_snvs$Consequence)) # <-  used below?
+
   
-  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious)))
+  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- strelka_snvs[
     keep,
     .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+      MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
       ref,alt,DP=DPt,DPn,allele1_swegen_count)
     ]
   if (nrow(selection)>0) {
@@ -1372,11 +1399,15 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   polyphen_damaging=grep('damaging',strelka_indels$PolyPhen)
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',strelka_indels$SIFT)
+  # And certain effects
+  regulatory=c(grep('TF',strelka_indels$Consequence))#,grep('regulatory',strelka_indels$Consequence)) # <-  used below?
+
   
-  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious)))
+  keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- strelka_snvs[
     keep,
     .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+      MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
       ref,alt,DP=DPt,DPn,allele1_swegen_count)
     ]
   if (nrow(selection) > 0) {
@@ -1643,11 +1674,13 @@ if (length(haplotypecaller_N_file)>0) {
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',haplotypecaller_table$SIFT)
   # And certain effects
-  regulatory=c(grep('TF',haplotypecaller_table$Consequence),grep('regulatory',haplotypecaller_table$Consequence)) # <- not used below
+  regulatory=c(grep('TF',haplotypecaller_table$Consequence))#,grep('regulatory',haplotypecaller_table$Consequence)) # <-  used below?
   
-  keep_haplotypecaller <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious))) #,regulatory
+  keep_haplotypecaller <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory))) #,regulatory
   selection <- haplotypecaller_table[keep_haplotypecaller,
-                                     .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+                                     .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',
+                                       Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+                                       MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
                                        ref,alt,alt2,DP,DP_t,RD,RD_t,AD,AD_t,AD2,AD2_t,allele1_swegen_count,allele2_swegen_count)
                                      ]
   for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
@@ -1734,13 +1767,14 @@ save(sampleList,file=paste0('~/reports/',sampleData$name,'_data.Rata'))
 
 ### Combined view {.active}
 ```{r}
-print('TODO')
+
+
 ```
 
 ## Chromosomes {.tabset}
 <!-- Plot composite data, chromosome wise -->
 ```{r}
-chromplot=function(thischr) if (F) {
+chromplot=function(thischr) {
   #  try( { 
   par(mai=c(0,4,0,2))
   g=ggplot()+
