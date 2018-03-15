@@ -10,7 +10,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-<!-- This script reads from a folder containing CAW (aka Sarek) output, including copy number data from ControlFreec and Ascat, structural variation from Manta, somatic point mutations from Mutact 2 and Strelka, and germline mutations from HaplotypeCaller.-->
+<!-- This script reads from a folder containing (VEP+snpEff) annotated CAW (aka Sarek) output, including copy number from ControlFreec and Ascat, structural variation from Manta, somatic point mutations from Mutact 2 and Strelka, and germline mutations from HaplotypeCaller.-->
 
 <!-- CSS style for tables to look ok: -->
 <style>
@@ -49,31 +49,25 @@ cat('Sample:',basename(getwd()),'\tDirectory:',getwd(),'\nDate:',date())
 files <- dir(recursive = T,full.names = T)
 files <- files[-grep(pattern = '.png',x = files)]
 # control freec files
-freec_Tratio_file <- files[grep(pattern = 'T.hg38.pileup.gz_ratio.txt',files)][1]
-freec_Nratio_file <- files[grep(pattern = 'T.hg38.pileup.gz_normal_ratio.txt',files)][1]
-freec_Tbaf_file <- files[grep(pattern = 'T.hg38.pileup.gz_BAF.txt',files)][1]
-freec_Nbaf_file <- files[grep(pattern = 'B.hg38.pileup.gz_BAF.txt',files)][1]
-if (is.na(freec_Nbaf_file)) 
-  freec_Nbaf_file <- files[grep(pattern = 'N.hg38.pileup.gz_BAF.txt',files)][1]
-freec_info_file <- files[grep(pattern = 'hg38.pileup.gz_info.txt',files)][1]
-freec_cnv_file <- files[grep(pattern = glob2rx('*T.hg38.pileup.gz_CNVs'),files)][1]
+freec_Tratio_file <- files[grep(pattern = '[TR].hg38.pileup.gz_ratio.txt',files,perl = T)][1]
+freec_Nratio_file <- files[grep(pattern = '[TR].hg38.pileup.gz_normal_ratio.txt',files,perl = T)][1]
+freec_Tbaf_file <- files[grep(pattern = '[TR].hg38.pileup.gz_BAF.txt',files,perl = T)][1]
+freec_Nbaf_file <- files[grep(pattern = '[BN].hg38.pileup.gz_BAF.txt',files,perl = T)][1]
+freec_info_file <- files[grep(pattern = 'hg38.pileup.gz_info.txt',files,perl = T)][1]
+freec_cnv_file <- files[grep(pattern = "^.*[TR]\\.hg38\\.pileup\\.gz_CNVs$",files,perl = T)][1]
 # Ascat files
-ascat_Tratio_file <- files[grep(pattern = glob2rx("*Ascat*T.LogR"),files)]
-ascat_Nratio_file <- files[grep(pattern = glob2rx("*Ascat*N.LogR"),files)]
-ascat_Tbaf_file <- files[grep(pattern = glob2rx("*Ascat*T.BAF"),files)]
-ascat_Nbaf_file <- files[grep(pattern = glob2rx("*Ascat*N.BAF"),files)]
-ascat_segment_file <- files[grep(pattern = glob2rx("*Ascat*T.cnvs.txt"),files)]
+ascat_Tratio_file <- files[grep(pattern = "^.*Ascat.*[TR]\\.LogR$",files)]
+ascat_Nratio_file <- files[grep(pattern = "^.*Ascat.*[BN]\\.LogR$",files)]
+ascat_Tbaf_file <- files[grep(pattern = "^.*Ascat.*[TR]\\.BAF$",files)]
+ascat_Nbaf_file <- files[grep(pattern = "^.*Ascat.*[BN]\\.BAF$",files)]
+ascat_segment_file <- files[grep(pattern = "^.*Ascat.*[TR]\\.cnvs\\.txt$",files)]
 # Manta structural variant files
-vep_Tstruct_file <- grep(pattern = glob2rx("*SnpEff/Manta*vs*somaticSV.*ann*.vcf"),files,value = T)[1]
-vep_Nstruct_file <- grep(pattern = glob2rx("*SnpEff/Manta*vs*diploidSV.*ann*.vcf"),files,value = T)[1]
+vep_Tstruct_file <- grep(pattern = "^.*SnpEff/Manta.*vs.*somaticSV\\..*ann.*\\.vcf$",files,value = T)[1]
+vep_Nstruct_file <- grep(pattern = "^.*SnpEff/Manta.*vs.*diploidSV\\..*ann.*\\.vcf$",files,value = T)[1]
 
 # Haplotype caller variant files
-haplotypecaller_T_file <- grep(pattern = glob2rx("*VEP/haplotypecaller*T.vcf.vep.ann.vcf"),files,value = T) # local
-if (length(haplotypecaller_T_file)==0)
-  haplotypecaller_T_file <- grep(pattern = glob2rx("*/Annotation/VEP/haplotypecaller_*T.vcf.vep.ann.vcf"),files,value = T) # bianca
-haplotypecaller_N_file <- grep(pattern = glob2rx("*VEP/haplotypecaller*N.vcf.vep.ann.vcf"),files,value = T) # local
-if (length(haplotypecaller_N_file)==0)
-  haplotypecaller_N_file <- grep(pattern = glob2rx("*/Annotation/VEP/haplotypecaller_*N.vcf.vep.ann.vcf"),files,value = T) # bianca
+haplotypecaller_T_file <- grep(pattern = "^.*VEP/haplotypecaller.*[TR]\\.vcf\\.vep\\.ann\\.vcf$",files,value = T) # local
+haplotypecaller_N_file <- grep(pattern = "^.*VEP/haplotypecaller.*[BN]\\.vcf\\.vep\\.ann\\.vcf$",files,value = T) # local
 # snpEff+VEP Mutect2 file
 mutect2_file <- grep(pattern = glob2rx("*/Annotation/mutect2_*canon.vep.ann.pick.PASS.recode.vcf"),files,value = T) # <- local
 if (length(mutect2_file)==0)
@@ -583,9 +577,9 @@ if (length(vep_Tstruct_file)>0) {
     if (length(t)>1 & t[1]!="<DUP") {
       tchr=strsplit(x = t[1],split = 'chr')[[1]][2]
       if (is.na(tchr)) tchr=strsplit(x = t[1],split = 'CHR')[[1]][2]
-      nstruc$altchr[i]=tchr
+      tstruc$altchr[i]=tchr
       tt=strsplit(t[2],'\\[')[[1]][1]; tt=strsplit(tt[1],'\\]')[[1]][1]
-      nstruc$altpos[i]=as.numeric(tt)
+      tstruc$altpos[i]=as.numeric(tt)
     }
     
     # also decide how it is to be plotted (not represented elsewhere, up or down arc)
@@ -651,16 +645,12 @@ if (length(vep_Tstruct_file)>0) {
   )
   
   
-  # Set gene tier to 1,2 based on Cosmic
-  selection[Gene_Name %in% tumorgenes$`Gene Symbol` | Gene_Name %in% local_tumorgenes$V1]$Gene_Tier <- 2
-  selection[Gene_Name %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
-  selection <- selection[order(Gene_Tier)]
-  
   # Set Gene and Effect tiers: 
   for (i in selection[,.I]) {
     symbol=strsplit(selection$Gene_Name[i],'&')[[1]] # fusions are reported as "gene1&gene2"
+    
     if (any(symbol %in% tumorgenes$`Gene Symbol`)) selection$Gene_Tier[i]=2
-    if (any(symbol %in% tumorgenes[Tier==1,`Gene Symbol`])) selection$Gene_Tier[i]=1
+    if (any(symbol %in% tumorgenes[Tier==1,`Gene Symbol`]) & length(symbol)<3) selection$Gene_Tier[i]=1
     
     length=abs(selection$SVLEN[i])
     gene=tumorgenes[`Gene Symbol` %in% symbol,] # this gene(s) from Cosmic table
@@ -969,16 +959,14 @@ if (length(vep_Nstruct_file)>0) {
   )
   
   
-  # Set gene tier to 1,2 based on Cosmic
-  selection[Gene_Name %in% tumorgenes$`Gene Symbol` | Gene_Name %in% local_tumorgenes$V1]$Gene_Tier <- 2
-  selection[Gene_Name %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
-  selection <- selection[order(Gene_Tier)]
-  
+
   # Set Gene and Effect tiers: 
   for (i in selection[,.I]) {
     symbol=strsplit(selection$Gene_Name[i],'&')[[1]] # fusions are reported as "gene1&gene2"
+   
     if (any(symbol %in% tumorgenes$`Gene Symbol`)) selection$Gene_Tier[i]=2
-    if (any(symbol %in% tumorgenes[Tier==1,`Gene Symbol`])) selection$Gene_Tier[i]=1
+    if (any(symbol %in% tumorgenes[Tier==1,`Gene Symbol`]) & length(symbol)<3) selection$Gene_Tier[i]=1
+  
     
     length=abs(selection$SVLEN[i])
     gene=tumorgenes[`Gene Symbol` %in% symbol,] # this gene(s) from Cosmic table
@@ -1234,12 +1222,12 @@ if (exists('tstruc')) {
                                    arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
                                    inherit.aes = FALSE)
   # add TUMOR data afflicted cosmic genes
-  temp=allgenes[name %in% manta_tumor_selected$SYMBOL[manta_tumor_selected$Gene_Tier<3]]
+  temp=allgenes[name %in% manta_tumor_selected$Gene_Name[manta_tumor_selected$Effect_Tier<3]]
   if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = cumstart,y = 1.45,label=name),
                                          data = temp,
                                          size=3)
   # add NORMAL data afflicted cosmic genes
-  temp=allgenes[name %in% manta_normal_selected$SYMBOL[manta_normal_selected$Gene_Tier<3]]
+  temp=allgenes[name %in% manta_normal_selected$Gene_Name[manta_normal_selected$Effect_Tier<3]]
   if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = cumstart,y = -1.55,label=name),
                                          data = temp,
                                          size=3)
@@ -1998,11 +1986,13 @@ sampleList <- list(
 )
 names(sampleList)=sampleData$name
 save(sampleList,file=paste0('~/reports/',sampleData$name,'_data.Rata'))
-
 ```
 
-### Combined view {.active}
+
+### Combined data {.active}
 ```{r}
+## Combine all data into a preliminary summary of gene effects
+
 
 
 ```
@@ -2010,8 +2000,7 @@ save(sampleList,file=paste0('~/reports/',sampleData$name,'_data.Rata'))
 ## Chromosomes {.tabset}
 <!-- Plot composite data, chromosome wise -->
 ```{r}
-chromplot=function(thischr) {
-  #  try( { 
+chromplot=function(thischr) if (T) {
   par(mai=c(0,4,0,2))
   g=ggplot()+
     scale_y_continuous(limits=c(-2.7,3),
@@ -2033,8 +2022,12 @@ chromplot=function(thischr) {
           axis.title.y=element_blank(),
           axis.ticks.y=element_blank())#+
   
+  # lines to separate parts of fig
+  g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-0.5,yend=-0.5),alpha=1)
+  g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-1.5,yend=-1.5),alpha=1)
+  g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-2.5,yend=-2.5),alpha=1)
   
-  ### TUMOR LOGRATIO  
+  ### TUMOR (& normal) LOGRATIO  
   if (exists('tratio')) {
     temp <- nratio
     temp$Ratio[temp$Ratio>3]=3
@@ -2058,7 +2051,7 @@ chromplot=function(thischr) {
   if (exists('tstruc')) if (nrow(tstruc)>0) {
     # first same chrom SVs
     temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr==tstruc$chr,]
-    if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=0.499,yend=0.5,col=SVTYPE,linetype=IMPRECISE),
+    if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=1.99,yend=2,col=SVTYPE,linetype=IMPRECISE),
                                      data = temp,alpha=1/2,
                                      curvature=-0.2,size=1,
                                      position = "identity", angle = 90, ncp = 50,
@@ -2069,11 +2062,38 @@ chromplot=function(thischr) {
     # then diff chrom SVs
     temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr!=tstruc$chr,]
     if (nrow(temp)>0) { 
-      g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=0.5,label=alt),
+      g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=2,label=listfix(temp$ALT)),
                            inherit.aes = F,size=3)
     }
+    # labels
+    temp=allgenes[name %in% manta_tumor_selected$Gene_Name[manta_tumor_selected$Effect_Tier<3 & manta_tumor_selected$chr==thischr]]
+    if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = start,y = 2,label=name),
+                                           data = temp,
+                                           size=3)
   }
-  
+  ### NORMAL SVs
+  # if (exists('nstruc')) if (nrow(nstruc)>0) {
+  #   # first same chrom SVs
+  #   temp=nstruc[nstruc$chr==thischr & nstruc$FILTER=='PASS' & nstruc$altchr==nstruc$chr,]
+  #   if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=0.149,yend=0.25,col=SVTYPE,linetype=IMPRECISE),
+  #                                    data = temp,alpha=1/2,
+  #                                    curvature=-0.2,size=1,
+  #                                    position = "identity", angle = 90, ncp = 50,
+  #                                    arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
+  #                                    inherit.aes = FALSE)
+  #   # then diff chrom SVs
+  #   temp=nstruc[nstruc$chr==thischr & nstruc$FILTER=='PASS' & nstruc$altchr!=nstruc$chr,]
+  #   if (nrow(temp)>0) { 
+  #     g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=0.25,label=listfix(temp$ALT)),
+  #                          inherit.aes = F,size=3)
+  #   }
+  #   # labels
+  #   temp=allgenes[name %in% manta_normal_selected$Gene_Name[manta_normal_selected$Effect_Tier<3 & manta_normal_selected$chr==thischr]]
+  #   if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = start,y = 0.25,label=name),
+  #                                          data = temp,
+  #                                          size=3)
+  # }
+  # 
   ### TUMOR MUTATIONS  
   if (exists('mutect2_table')) if (nrow(mutect2_table)>0) {
     temp=mutect2_table[chr==thischr & filter=='PASS' & Callers=='Mutect 2 and Strelka',]
@@ -2124,7 +2144,6 @@ chromplot=function(thischr) {
                       nudge_y= -0.1,size=2)
   return(g)
   
-  #}, silent=T)
 }
 ```
 
