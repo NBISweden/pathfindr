@@ -705,9 +705,9 @@ if (length(vep_Tstruct_file)>0) {
         length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
       if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
         if (selection$Annotation_Impact[i]=='HIGH') {
-      selection$Effect_Tier[i]=2 # some indication of effect!
-      selection$Comment[i]=paste(selection$Comment[i],'high_impact')
-    }
+          selection$Effect_Tier[i]=2 # some indication of effect!
+          selection$Comment[i]=paste(selection$Comment[i],'high_impact')
+        }
   }
   selection <- selection[order(Effect_Tier,Gene_Tier)]
   
@@ -844,7 +844,7 @@ if (length(vep_Tstruct_file)>0) {
       ascat_cnv$endpos>selection$end[i]
     if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
   }
-
+  
   manta_tumor_selected <- selection
   
   htmlTable(manta_tumor_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
@@ -962,10 +962,10 @@ if (length(vep_Nstruct_file)>0) {
   ## Make new table with predicted effects
   selection <- unique(
     manta_normal_table[keep,
-                      .(SVTYPE,ID=THISID,chr,start,end,altchr,altpos,SVLEN=unlist(SVLEN),
-                        Allele,Gene_Name,Annotation,Annotation_Impact,
-                        Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
-                        REF,ALT=unlist(ALT))]
+                       .(SVTYPE,ID=THISID,chr,start,end,altchr,altpos,SVLEN=unlist(SVLEN),
+                         Allele,Gene_Name,Annotation,Annotation_Impact,
+                         Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
+                         REF,ALT=unlist(ALT))]
   )
   
   
@@ -1023,12 +1023,12 @@ if (length(vep_Nstruct_file)>0) {
         length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
       if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
         if (selection$Annotation_Impact[i]=='HIGH') {
-      selection$Effect_Tier[i]=2 # some indication of effect!
-      selection$Comment[i]=paste(selection$Comment[i],'high_impact')
-    }
+          selection$Effect_Tier[i]=2 # some indication of effect!
+          selection$Comment[i]=paste(selection$Comment[i],'high_impact')
+        }
   }
   selection <- selection[order(Effect_Tier,Gene_Tier)]
-
+  
   
   # # annotation is in the CSQ column.
   # h=strsplit(info(header(nstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
@@ -1161,7 +1161,7 @@ if (length(vep_Nstruct_file)>0) {
       ascat_cnv$endpos>selection$end[i]
     if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
   }
-
+  
   manta_normal_selected <- selection
   
   htmlTable(manta_normal_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
@@ -1347,7 +1347,6 @@ if (length(mutect2_file)>0) {
   # And certain effects
   regulatory=c(grep('TF',mutect2_table$Consequence))#,grep('regulatory',mutect2_table$Consequence)) # <-  used below?
   
-  
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- mutect2_table[
     keep,
@@ -1357,6 +1356,17 @@ if (length(mutect2_file)>0) {
     ]
   if (nrow(selection)>0) {
     for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    
+    # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
+    for (i in which(selection$SYMBOL=='')) {
+      near=allgenes[chr==selection$chr[i] &
+                      start<selection$end[i]+1e5 &
+                      end>selection$start[i]-1e5]
+      if (nrow(near)>0) {
+        near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
+        selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+      }
+    }  
     
     # Genes in census or local list considered T2, census Tier1 then gets T1
     selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
@@ -1371,6 +1381,7 @@ if (length(mutect2_file)>0) {
     selection[is_hotspot_pos | (IMPACT=='HIGH' &
                                   selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
     selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
+    
     
     # Add ASCAT LOH.
     for (i in 1:nrow(selection)) {
@@ -1484,6 +1495,17 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
     ]
   if (nrow(selection)>0) {
     for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    
+    # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
+    for (i in which(selection$SYMBOL=='')) {
+      near=allgenes[chr==selection$chr[i] &
+                      start<selection$end[i]+1e5 &
+                      end>selection$start[i]-1e5]
+      if (nrow(near)>0) {
+        near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
+        selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+      }
+    }  
     
     # Genes in census or local list considered T2, census Tier1 then gets T1
     selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
@@ -1601,6 +1623,18 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
     ]
   if (nrow(selection) > 0) {
     for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    
+    # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
+    for (i in which(selection$SYMBOL=='')) {
+      near=allgenes[chr==selection$chr[i] &
+                      start<selection$end[i]+1e5 &
+                      end>selection$start[i]-1e5]
+      if (nrow(near)>0) {
+        near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
+        selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+      }
+    }  
+    
     
     # Genes in census or local list considered T2, census Tier1 then gets T1
     selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
@@ -1866,36 +1900,49 @@ if (length(haplotypecaller_N_file)>0) {
   regulatory=c(grep('TF',haplotypecaller_table$Consequence))#,grep('regulatory',haplotypecaller_table$Consequence)) # <-  used below?
   
   keep_haplotypecaller <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory))) #,regulatory
+  
   selection <- haplotypecaller_table[keep_haplotypecaller,
                                      .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',
                                        Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
                                        MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
-                                       ref,alt,alt2,DP,DP_t,RD,RD_t,AD,AD_t,AD2,AD2_t,allele1_swegen_count,allele2_swegen_count)
-                                     ]
-  for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+                                       ref,alt,alt2,DP,DP_t,RD,RD_t,AD,AD_t,AD2,AD2_t,allele1_swegen_count,allele2_swegen_count)]
   
-  
-  # Genes in census or local list considered T2, census Tier1 then gets T1
-  selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
-  selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
-  
-  # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
-  selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
-  temp=paste(selection$SYMBOL,selection$Protein_position)
-  is_hotspot_pos <- 
-    temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
-    temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
-  selection[is_hotspot_pos | (IMPACT=='HIGH' &
-                                selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
-  selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
-  selection <- selection[order(Effect_Tier,Gene_Tier)]
-  
-  # Add ASCAT LOH.
-  for (i in 1:nrow(selection)) {
-    ix=ascat_cnv$chr==selection$chr[i] &
-      ascat_cnv$startpos<selection$start[i] &
-      ascat_cnv$endpos>selection$end[i]
-    if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
+  if (nrow(selection)>0) {  
+    for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    
+    # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
+    for (i in which(selection$SYMBOL=='')) {
+      near=allgenes[chr==selection$chr[i] &
+                      start<selection$end[i]+1e5 &
+                      end>selection$start[i]-1e5]
+      if (nrow(near)>0) {
+        near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
+        selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+      }
+    }  
+    
+    # Genes in census or local list considered T2, census Tier1 then gets T1
+    selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
+    selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
+    
+    # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
+    selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
+    temp=paste(selection$SYMBOL,selection$Protein_position)
+    is_hotspot_pos <- 
+      temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
+      temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
+    selection[is_hotspot_pos | (IMPACT=='HIGH' &
+                                  selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
+    selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
+    selection <- selection[order(Effect_Tier,Gene_Tier)]
+    
+    # Add ASCAT LOH.
+    for (i in 1:nrow(selection)) {
+      ix=ascat_cnv$chr==selection$chr[i] &
+        ascat_cnv$startpos<selection$start[i] &
+        ascat_cnv$endpos>selection$end[i]
+      if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
+    }
   }
   
   haplotypecaller_selected <- selection
