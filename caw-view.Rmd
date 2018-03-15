@@ -16,14 +16,15 @@ editor_options:
 <style>
 
 table, td, th {
-  border: none;
-  padding-left: 1em;
-  padding-right: 1em;
-  min-width: 50%;
-  margin-left: auto;
-  margin-right: auto;
-  margin-top: 1em;
-  margin-bottom: 1em;
+border: none;
+padding-left: 1em;
+padding-right: 1em;
+min-width: 100%;
+max-width: 1200px;
+margin-left: auto;
+margin-right: auto;
+margin-top: 1em;
+margin-bottom: 1em;
 }
 
 </style>
@@ -31,6 +32,7 @@ table, td, th {
 <!-- Markdown setup -->
 ```{r setup, include=F}
 knitr::opts_chunk$set(echo = FALSE,comment = '',warning=F,error = F)
+options(width = 600)
 ```
 
 # {.tabset .tabset-pills}
@@ -62,8 +64,8 @@ ascat_Tbaf_file <- files[grep(pattern = glob2rx("*Ascat*T.BAF"),files)]
 ascat_Nbaf_file <- files[grep(pattern = glob2rx("*Ascat*N.BAF"),files)]
 ascat_segment_file <- files[grep(pattern = glob2rx("*Ascat*T.cnvs.txt"),files)]
 # Manta structural variant files
-vep_Tstruct_file <- grep(pattern = glob2rx("*VEP/Manta*vs*somaticSV.*ann*.vcf"),files,value = T)[1]
-vep_Nstruct_file <- grep(pattern = glob2rx("*VEP/Manta*vs*diploidSV.*ann*.vcf"),files,value = T)[1]
+vep_Tstruct_file <- grep(pattern = glob2rx("*SnpEff/Manta*vs*somaticSV.*ann*.vcf"),files,value = T)[1]
+vep_Nstruct_file <- grep(pattern = glob2rx("*SnpEff/Manta*vs*diploidSV.*ann*.vcf"),files,value = T)[1]
 
 # Haplotype caller variant files
 haplotypecaller_T_file <- grep(pattern = glob2rx("*VEP/haplotypecaller*T.vcf.vep.ann.vcf"),files,value = T) # local
@@ -450,11 +452,11 @@ if (exists('tratio')) {
 ```{r, echo=FALSE,fig.width=8,fig.height=4,warning=F}
 if (exists('binned')) {
   binned$tmaf[binned$tmaf<0]=1
-  g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.5,1.5))+
+  g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.3,3))+
     geom_point(aes(x = tratio,y = tmaf,col=chr),data=binned[binned$tratio<1.8,])+
     xlab('Tumor (1Mb mean) DNA ratio')+ylab('Tumor (1Mb mean) major allele ratio')+
     scale_y_continuous(breaks = seq(0.5,1,0.1)) +
-    scale_x_continuous(breaks = seq(0.5,1.5,0.1))+
+    scale_x_continuous(breaks = seq(0.5,2.5,0.1))+
     theme(panel.grid.minor.x = element_blank(),
           panel.grid.major.x = element_line(colour="grey", size=0.2),
           panel.grid.major.y = element_line(colour="grey", size=0.2),
@@ -515,11 +517,11 @@ if (exists('ascat_tratio')) {
 ```{r, echo=FALSE,fig.width=8,fig.height=4,warning=F}
 if (exists('ascat_binned')) {
   #ascat_binned$tmaf[ascat_binned$tmaf<0]=1
-  g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.5,1.5))+
+  g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.3,3))+
     geom_point(aes(x = tratio,y = tmaf,col=chr),data=ascat_binned[ascat_binned$tratio<1.8,])+
     xlab('Tumor (1Mb mean) DNA ratio')+ylab('Tumor (1Mb mean) major allele ratio')+
     scale_y_continuous(breaks = seq(0.5,1,0.1)) +
-    scale_x_continuous(breaks = seq(0.5,1.5,0.1))+
+    scale_x_continuous(breaks = seq(0.5,2.5,0.1))+
     theme(panel.grid.minor.x = element_blank(),
           panel.grid.major.x = element_line(colour="grey", size=0.2),
           panel.grid.major.y = element_line(colour="grey", size=0.2),
@@ -530,7 +532,7 @@ if (exists('ascat_binned')) {
 ```
 
 
-## Structural variants {.active .tabset}
+## Structural variants {.tabset}
 
 <!-- Read the tumor structural variant data -->
 ### Manta (tumor)
@@ -579,10 +581,13 @@ if (length(vep_Tstruct_file)>0) {
   for (i in 1:nrow(tstruc)) {
     t=strsplit(x = tstruc$ALT[[i]],split = ':')[[1]]
     if (length(t)>1 & t[1]!="<DUP") {
-      tstruc$altchr[i]=strsplit(x = t[1],split = 'chr')[[1]][2]
+      tchr=strsplit(x = t[1],split = 'chr')[[1]][2]
+      if (is.na(tchr)) tchr=strsplit(x = t[1],split = 'CHR')[[1]][2]
+      nstruc$altchr[i]=tchr
       tt=strsplit(t[2],'\\[')[[1]][1]; tt=strsplit(tt[1],'\\]')[[1]][1]
-      tstruc$altpos[i]=as.numeric(tt)
+      nstruc$altpos[i]=as.numeric(tt)
     }
+    
     # also decide how it is to be plotted (not represented elsewhere, up or down arc)
     if (tstruc$chr[i]==tstruc$altchr[i]) {
       tstruc$plot[i]=T
@@ -604,123 +609,76 @@ if (length(vep_Tstruct_file)>0) {
     tstruc$altcumpos[ix]=tstruc$altpos[ix]+chrsz$starts[i]
   }
   
-  # VEP annotation is in the CSQ column.
-  h=strsplit(info(header(tstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
-  vep_header=strsplit(h,'\\|')[[1]]
-
-  # VEP annotation is put in vep_table
-  vep_table=matrix(data = NA,nrow = length(unlist(tstruc$CSQ)),ncol = length(vep_header)+1)
-  colnames(vep_table)=c('N',vep_header)
+  
+  # snpEff annotation is in the ANN column.
+  h=strsplit(info(header(tstruc_vcf))['ANN',][,3],'annotations: \'')[[1]][2]
+  snpEff_header=trimws(strsplit(h,'\\|')[[1]])
+  
+  # snpEff annotation is put in snpEff_table
+  snpEff_table=matrix(data = NA,nrow = length(unlist(tstruc$ANN)),ncol = length(snpEff_header)+1)
+  colnames(snpEff_table)=c('N',snpEff_header)
   row=1
   for (i in 1:nrow(tstruc)) { # for each variant
     # for each VEP annotation:
-    for (j in 1:length(tstruc$CSQ[[i]])) {
-      line=strsplit(tstruc$CSQ[[i]][j],'\\|')[[1]]
-      vep_table[row,1]=i
-      vep_table[row,1+(1:length(line))]=line
+    for (j in 1:length(tstruc$ANN[[i]]))  if (length(tstruc$ANN[[i]])>0) {
+      line=strsplit(tstruc$ANN[[i]][j],'\\|')[[1]]
+      snpEff_table[row,1]=i
+      snpEff_table[row,1+(1:length(line))]=line
       row=row+1
     }
   }
-  vep_table=as.data.table(vep_table)
+  snpEff_table=unique(as.data.table(snpEff_table)[,1:5])
   
-  # # snpEff annotation is in the ANN column.
-  # h=strsplit(info(header(tstruc_vcf))['ANN',][,3],'annotations: \'')[[1]][2]
-  # snpEff_header=trimws(strsplit(h,'\\|')[[1]])
-  # 
-  # # snpEff annotation is put in snpEff_table
-  # snpEff_table=matrix(data = NA,nrow = length(unlist(tstruc$ANN)),ncol = length(snpEff_header)+1)
-  # colnames(snpEff_table)=c('N',snpEff_header)
-  # row=1
-  # for (i in 1:nrow(tstruc)) { # for each variant
-  #   # for each VEP annotation:
-  #   for (j in 1:length(tstruc$ANN[[i]])) { 
-  #     line=strsplit(tstruc$ANN[[i]][j],'\\|')[[1]]
-  #     snpEff_table[row,1]=i
-  #     snpEff_table[row,1+(1:length(line))]=line
-  #     row=row+1
-  #   }
-  # }
-  # snpEff_table=as.data.table(snpEff_table)
-    
   # Add to data
   tstruc$N=as.character(1:nrow(tstruc))
-  manta_tumor_table <- merge(tstruc,vep_table,by='N')[order(cumstart),-1]
+  manta_tumor_table <- merge(tstruc,snpEff_table,by='N')[order(cumstart),-1]
   
-  # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
-  del_ok <- which(manta_tumor_table$SVTYPE=='DEL' & abs(manta_tumor_table$SVLEN)<3e6)
-  # Amplification: consider <5M for amplification consequence, report census genes
-  amp_ok <- which(manta_tumor_table$SVTYPE=='DUP' & abs(manta_tumor_table$SVLEN)<5e6)
-  # Fusions/disrupting: Do the SVs start/end at gene? 
-  manta_tumor_table$Starts_Near <- ''
-  manta_tumor_table$Ends_Near <- ''
-  manta_tumor_table$Junction <- ''
-  cumstart=allgenes$cumstart
-  cumend=allgenes$cumend
-  for (i in 1:nrow(manta_tumor_table)) {
-    i=as.integer(i)
-    #cat(i,'\n')
-    g=manta_tumor_table$SYMBOL[i]
-    # genes overlapping SV start
-    t=manta_tumor_table$cumstart[i]
-    ix=cumstart-10e3 < t & cumend +10e3 > t
-    if (length(ix)>0) {
-      genes=allgenes[ix,unique(name)]
-      set(manta_tumor_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
-      if (g %in% genes) set(manta_tumor_table,i,'Junction',value='Y')
-    }
-    # genes overlapping SV end
-    t=manta_tumor_table$altcumpos[i]
-    ix=cumstart-10e3 < t & cumend +10e3 > t
-    if (length(ix)>0) {
-      genes=allgenes[ix,unique(name)]
-      set(manta_tumor_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
-      if (g %in% genes) set(manta_tumor_table,i,'Junction',value='Y')
-    }
-  }
-  # Inside genes: Junctions may be putative fusion or knock-out if either end is "this" gene.
-  afflicted_ok <- which(manta_tumor_table$Junction=='Y')
+  # Deletion: remove deletions >3MB for "xxx_ablation" consequences
+  del_rm <- intersect(which(abs(manta_tumor_table$SVLEN)>3e6),
+                      grep('ablation',manta_tumor_table$Annotation,fixed))
+  # Amplification: remove >5M for 'duplication' consequences, report census genes
+  amp_rm <- intersect(which(abs(manta_tumor_table$SVLEN)>5e6),
+                      grep('duplication',manta_tumor_table$Annotation))
+  keep=rep(T,nrow(manta_tumor_table)); keep[-union(del_rm,amp_rm)]=F
   
   ## Make new table with predicted effects
   selection <- unique(
-    manta_tumor_table[unique(sort(c(del_ok, amp_ok, afflicted_ok))),
-                      .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
-                        SYMBOL,Starts_Near,Ends_Near,
+    manta_tumor_table[keep,
+                      .(SVTYPE,ID=THISID,chr,start,end,altchr,altpos,SVLEN=unlist(SVLEN),
+                        Allele,Gene_Name,Annotation,Annotation_Impact,
                         Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
-                        Consequence,REF,altpos,ALT=unlist(ALT))]
+                        REF,ALT=unlist(ALT))]
   )
   
   
   # Set gene tier to 1,2 based on Cosmic
-  selection[SYMBOL %in% tumorgenes$`Gene Symbol` | SYMBOL %in% local_tumorgenes$V1]$Gene_Tier <- 2
-  selection[SYMBOL %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
+  selection[Gene_Name %in% tumorgenes$`Gene Symbol` | Gene_Name %in% local_tumorgenes$V1]$Gene_Tier <- 2
+  selection[Gene_Name %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
   selection <- selection[order(Gene_Tier)]
   
-  # Set Effect tiers: 
-  for (i in selection[Gene_Tier<3,.I]) {
-    symbol=selection$SYMBOL[i]
-    starts_at=selection$Starts_Near[i]
-    ends_at=selection$Ends_Near[i]
+  # Set Gene and Effect tiers: 
+  for (i in selection[,.I]) {
+    symbol=strsplit(selection$Gene_Name[i],'&')[[1]] # fusions are reported as "gene1&gene2"
+    if (any(symbol %in% tumorgenes$`Gene Symbol`)) selection$Gene_Tier[i]=2
+    if (any(symbol %in% tumorgenes[Tier==1,`Gene Symbol`])) selection$Gene_Tier[i]=1
+    
     length=abs(selection$SVLEN[i])
-    gene=tumorgenes[`Gene Symbol`==symbol,] # this gene from Cosmic table
+    gene=tumorgenes[`Gene Symbol` %in% symbol,] # this gene(s) from Cosmic table
     # first fusions/translocations
-    g=grep('fusion',gene$`Role in Cancer`)
-    if (length(g)>0) { # fusion gene yes
-      if (symbol %in% c(starts_at,ends_at)) { # and the start or end is at this (SYMBOL) gene
-        # now 1 if perfect match with Cosmic, 2 if partial match
-        mates=strsplit(gene$`Translocation Partner`,', ')[[1]] # this gene's common tx mates
-        if (starts_at != ends_at) { # if this symbol is either start or end, not both
-          if (starts_at %in% mates | ends_at %in% mates) { # and either is a member of known fusion mates
-            selection$Effect_Tier[i]=1 # common translocation/fusion
-            selection$Comment[i]=paste(selection$Comment[i],'known_fusion')
-          } else {
-            selection$Effect_Tier[i]=2 # then at least tier 2
-            selection$Comment[i]=paste0(selection$Comment[i],'partial_known_fusion')
-          }
-        }
-      }
+    if (selection$Annotation[i]=='gene_fusion') {
+      g=grep('fusion',gene$`Role in Cancer`)
+      if (length(g)>0) { # this is a fusion and either is fusion gene yes
+        selection$Effect_Tier[i]=2 # then at least tier 2
+        selection$Comment[i]='partial_known_fusion'
+      }    
+      # now 1 if perfect match with Cosmic
+      if (nrow(gene)>1) if (as.logical(grep(gene$`Gene Symbol`[2],gene$`Translocation Partner`[1]))) {
+        selection$Effect_Tier[i]=1 # common translocation/fusion
+        selection$Comment[i]='known_fusion'
+      } 
     }
     # then deletions
-    if (selection$SVTYPE[i]=='DEL' & length<3e6) {
+    if (selection$SVTYPE[i]=='DEL' & length<3e6) if (length(grep('ablation',selection$Annotation[i]))>0) { # small DEL, ablation effect
       g=grep('TSG',gene$`Role in Cancer`)
       if (length(g)>0) { # Tumor supressor gene yes
         selection$Effect_Tier[i]=1
@@ -731,7 +689,7 @@ if (length(vep_Tstruct_file)>0) {
       }
     }
     # then amplifications
-    if (selection$SVTYPE[i]=='DUP' & length<5e6) {
+    if (selection$SVTYPE[i]=='DUP' & length<5e6) if (length(grep('duplication',selection$Annotation[i]))>0) { # small amp, dupplication effect
       g=grep('oncogene',gene$`Role in Cancer`)
       if (length(g)>0) { # Oncogene yes
         selection$Effect_Tier[i]=1
@@ -742,12 +700,143 @@ if (length(vep_Tstruct_file)>0) {
       }
     }
     # last other disruptions
-    if (symbol %in% c(starts_at,ends_at)) { # if the start or end is at this (SYMBOL) gene
-      selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2) # some indication of effect!
-      selection$Comment[i]=paste(selection$Comment[i],'at_breakpoint')
+    if (length(grep('duplication',selection$Annotation[i])==0) &
+        length(grep('ablation',selection$Annotation[i])==0) &
+        length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
+      if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
+        if (selection$Annotation_Impact[i]=='HIGH') {
+      selection$Effect_Tier[i]=2 # some indication of effect!
+      selection$Comment[i]=paste(selection$Comment[i],'high_impact')
     }
   }
+  selection <- selection[order(Effect_Tier,Gene_Tier)]
   
+  
+  # # VEP annotation is in the CSQ column.
+  # h=strsplit(info(header(tstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
+  # vep_header=strsplit(h,'\\|')[[1]]
+  # 
+  # # VEP annotation is put in vep_table
+  # vep_table=matrix(data = NA,nrow = length(unlist(tstruc$CSQ)),ncol = length(vep_header)+1)
+  # colnames(vep_table)=c('N',vep_header)
+  # row=1
+  # for (i in 1:nrow(tstruc)) { # for each variant
+  #   # for each VEP annotation:
+  #   for (j in 1:length(tstruc$CSQ[[i]])) {
+  #     line=strsplit(tstruc$CSQ[[i]][j],'\\|')[[1]]
+  #     vep_table[row,1]=i
+  #     vep_table[row,1+(1:length(line))]=line
+  #     row=row+1
+  #   }
+  # }
+  # vep_table=as.data.table(vep_table)
+  
+  # # Add to data
+  # tstruc$N=as.character(1:nrow(tstruc))
+  # manta_tumor_table <- merge(tstruc,vep_table,by='N')[order(cumstart),-1]
+  # 
+  # # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
+  # del_ok <- which(manta_tumor_table$SVTYPE=='DEL' & abs(manta_tumor_table$SVLEN)<3e6)
+  # # Amplification: consider <5M for amplification consequence, report census genes
+  # amp_ok <- which(manta_tumor_table$SVTYPE=='DUP' & abs(manta_tumor_table$SVLEN)<5e6)
+  # # Fusions/disrupting: Do the SVs start/end at gene? 
+  # manta_tumor_table$Starts_Near <- ''
+  # manta_tumor_table$Ends_Near <- ''
+  # manta_tumor_table$Junction <- ''
+  # cumstart=allgenes$cumstart
+  # cumend=allgenes$cumend
+  # for (i in 1:nrow(manta_tumor_table)) {
+  #   i=as.integer(i)
+  #   #cat(i,'\n')
+  #   g=manta_tumor_table$SYMBOL[i]
+  #   # genes overlapping SV start
+  #   t=manta_tumor_table$cumstart[i]
+  #   ix=cumstart-10e3 < t & cumend +10e3 > t
+  #   if (length(ix)>0) {
+  #     genes=allgenes[ix,unique(name)]
+  #     set(manta_tumor_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
+  #     if (g %in% genes) set(manta_tumor_table,i,'Junction',value='Y')
+  #   }
+  #   # genes overlapping SV end
+  #   t=manta_tumor_table$altcumpos[i]
+  #   ix=cumstart-10e3 < t & cumend +10e3 > t
+  #   if (length(ix)>0) {
+  #     genes=allgenes[ix,unique(name)]
+  #     set(manta_tumor_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
+  #     if (g %in% genes) set(manta_tumor_table,i,'Junction',value='Y')
+  #   }
+  # }
+  # # Inside genes: Junctions may be putative fusion or knock-out if either end is "this" gene.
+  # afflicted_ok <- which(manta_tumor_table$Junction=='Y')
+  # 
+  # ## Make new table with predicted effects
+  # selection <- unique(
+  #   manta_tumor_table[unique(sort(c(del_ok, amp_ok, afflicted_ok))),
+  #                     .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
+  #                       SYMBOL,Starts_Near,Ends_Near,
+  #                       Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
+  #                       Consequence,REF,altpos,ALT=unlist(ALT))]
+  # )
+  # 
+  # 
+  # # Set gene tier to 1,2 based on Cosmic
+  # selection[SYMBOL %in% tumorgenes$`Gene Symbol` | SYMBOL %in% local_tumorgenes$V1]$Gene_Tier <- 2
+  # selection[SYMBOL %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
+  # selection <- selection[order(Gene_Tier)]
+  # 
+  # # Set Effect tiers: 
+  # for (i in selection[Gene_Tier<3,.I]) {
+  #   symbol=selection$SYMBOL[i]
+  #   starts_at=selection$Starts_Near[i]
+  #   ends_at=selection$Ends_Near[i]
+  #   length=abs(selection$SVLEN[i])
+  #   gene=tumorgenes[`Gene Symbol`==symbol,] # this gene from Cosmic table
+  #   # first fusions/translocations
+  #   g=grep('fusion',gene$`Role in Cancer`)
+  #   if (length(g)>0) { # fusion gene yes
+  #     if (symbol %in% c(starts_at,ends_at)) { # and the start or end is at this (SYMBOL) gene
+  #       # now 1 if perfect match with Cosmic, 2 if partial match
+  #       mates=strsplit(gene$`Translocation Partner`,', ')[[1]] # this gene's common tx mates
+  #       if (starts_at != ends_at) { # if this symbol is either start or end, not both
+  #         if (starts_at %in% mates | ends_at %in% mates) { # and either is a member of known fusion mates
+  #           selection$Effect_Tier[i]=1 # common translocation/fusion
+  #           selection$Comment[i]=paste(selection$Comment[i],'known_fusion')
+  #         } else {
+  #           selection$Effect_Tier[i]=2 # then at least tier 2
+  #           selection$Comment[i]=paste0(selection$Comment[i],'partial_known_fusion')
+  #         }
+  #       }
+  #     }
+  #   }
+  #   # then deletions
+  #   if (selection$SVTYPE[i]=='DEL' & length<3e6) {
+  #     g=grep('TSG',gene$`Role in Cancer`)
+  #     if (length(g)>0) { # Tumor supressor gene yes
+  #       selection$Effect_Tier[i]=1
+  #       selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
+  #     } else { # else 2 unless already one
+  #       selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+  #       selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
+  #     }
+  #   }
+  #   # then amplifications
+  #   if (selection$SVTYPE[i]=='DUP' & length<5e6) {
+  #     g=grep('oncogene',gene$`Role in Cancer`)
+  #     if (length(g)>0) { # Oncogene yes
+  #       selection$Effect_Tier[i]=1
+  #       selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
+  #     } else {
+  #       selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+  #       selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
+  #     }
+  #   }
+  #   # last other disruptions
+  #   if (symbol %in% c(starts_at,ends_at)) { # if the start or end is at this (SYMBOL) gene
+  #     selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2) # some indication of effect!
+  #     selection$Comment[i]=paste(selection$Comment[i],'at_breakpoint')
+  #   }
+  # }
+  # 
   # Add ASCAT LOH.
   for (i in 1:nrow(selection)) {
     ix=ascat_cnv$chr==selection$chr[i] &
@@ -755,8 +844,7 @@ if (length(vep_Tstruct_file)>0) {
       ascat_cnv$endpos>selection$end[i]
     if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
   }
-  selection <- selection[order(Effect_Tier,Gene_Tier)]
-  
+
   manta_tumor_selected <- selection
   
   htmlTable(manta_tumor_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
@@ -813,7 +901,9 @@ if (length(vep_Nstruct_file)>0) {
   for (i in 1:nrow(nstruc)) {
     t=strsplit(x = nstruc$ALT[[i]],split = ':')[[1]]
     if (length(t)>1 & t[1]!="<DUP") {
-      nstruc$altchr[i]=strsplit(x = t[1],split = 'chr')[[1]][2]
+      tchr=strsplit(x = t[1],split = 'chr')[[1]][2]
+      if (is.na(tchr)) tchr=strsplit(x = t[1],split = 'CHR')[[1]][2]
+      nstruc$altchr[i]=tchr
       tt=strsplit(t[2],'\\[')[[1]][1]; tt=strsplit(tt[1],'\\]')[[1]][1]
       nstruc$altpos[i]=as.numeric(tt)
     }
@@ -838,105 +928,75 @@ if (length(vep_Nstruct_file)>0) {
     nstruc$altcumpos[ix]=nstruc$altpos[ix]+chrsz$starts[i]
   }
   
+  # snpEff annotation is in the ANN column.
+  h=strsplit(info(header(nstruc_vcf))['ANN',][,3],'annotations: \'')[[1]][2]
+  snpEff_header=trimws(strsplit(h,'\\|')[[1]])
   
-  
-  # annotation is in the CSQ column.
-  h=strsplit(info(header(nstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
-  vep_header=strsplit(h,'\\|')[[1]]
-  
-  # VEP annotation is put in annotation_table
-  annotation_table=matrix(data = NA,nrow = length(unlist(nstruc$CSQ)),ncol = length(vep_header)+1)
-  colnames(annotation_table)=c('N',vep_header)
+  # snpEff annotation is put in snpEff_table
+  snpEff_table=matrix(data = NA,nrow = length(unlist(nstruc$ANN)),ncol = length(snpEff_header)+1)
+  colnames(snpEff_table)=c('N',snpEff_header)
   row=1
-  for (i in 1:nrow(nstruc)) { # for each variant
+  for (i in 1:nrow(nstruc)) if (length(nstruc$ANN[[i]])>0) { # for each variant
     # for each VEP annotation:
-    for (j in 1:length(nstruc$CSQ[[i]])) { 
-      line=strsplit(nstruc$CSQ[[i]][j],'\\|')[[1]]
-      annotation_table[row,1]=i
-      annotation_table[row,1+(1:length(line))]=line
+    for (j in 1:length(nstruc$ANN[[i]])) {
+      line=strsplit(nstruc$ANN[[i]][j],'\\|')[[1]]
+      snpEff_table[row,1]=i
+      snpEff_table[row,1+(1:length(line))]=line
       row=row+1
     }
   }
-  annotation_table=as.data.table(annotation_table)
+  snpEff_table=unique(as.data.table(snpEff_table)[,1:5])
   
   # Add to data
   nstruc$N=as.character(1:nrow(nstruc))
-  manta_normal_table <- merge(nstruc,annotation_table,by='N')[order(cumstart),-1]
+  manta_normal_table <- merge(nstruc,snpEff_table,by='N')[order(cumstart),-1]
   
-  # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
-  del_ok <- which(manta_normal_table$SVTYPE=='DEL' & abs(manta_normal_table$SVLEN)<3e6)
-  # Amplification: consider <5M for amplification consequence, report census genes
-  amp_ok <- which(manta_normal_table$SVTYPE=='DUP' & abs(manta_normal_table$SVLEN)<5e6)
-  # Fusions/disrupting: Do the SVs start/end at gene? 
-  manta_normal_table$Starts_Near <- ''
-  manta_normal_table$Ends_Near <- ''
-  manta_normal_table$Junction <- ''
-  cumstart=allgenes$cumstart
-  cumend=allgenes$cumend
-  for (i in 1:nrow(manta_normal_table)) {
-    i=as.integer(i)
-    #cat(i,'\n')
-    g=manta_normal_table$SYMBOL[i]
-    # genes overlapping SV start
-    t=manta_normal_table$cumstart[i]
-    ix=cumstart-10e3 < t & cumend +10e3 > t
-    if (length(ix)>0) {
-      genes=allgenes[ix,unique(name)]
-      set(manta_normal_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
-      if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
-    }
-    # genes overlapping SV end
-    t=manta_normal_table$altcumpos[i]
-    ix=cumstart-10e3 < t & cumend +10e3 > t
-    if (length(ix)>0) {
-      genes=allgenes[ix,unique(name)]
-      set(manta_normal_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
-      if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
-    }
-  }
-  # Inside genes: Junctions may be putative fusion or knock-out if either end is "this" gene.
-  afflicted_ok <- which(manta_normal_table$Junction=='Y')
+  # Deletion: remove deletions >3MB for "xxx_ablation" consequences
+  del_rm <- intersect(which(abs(manta_normal_table$SVLEN)>3e6),
+                      grep('ablation',manta_normal_table$Annotation,fixed))
+  # Amplification: remove >5M for 'duplication' consequences, report census genes
+  amp_rm <- intersect(which(abs(manta_normal_table$SVLEN)>5e6),
+                      grep('duplication',manta_normal_table$Annotation))
+  keep=rep(T,nrow(manta_normal_table)); keep[-union(del_rm,amp_rm)]=F
   
   ## Make new table with predicted effects
   selection <- unique(
-    manta_normal_table[unique(sort(c(del_ok, amp_ok, afflicted_ok))),
-                       .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
-                         SYMBOL,Starts_Near,Ends_Near,
-                         Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
-                         Consequence,REF,altpos,ALT=unlist(ALT))]
+    manta_normal_table[keep,
+                      .(SVTYPE,ID=THISID,chr,start,end,altchr,altpos,SVLEN=unlist(SVLEN),
+                        Allele,Gene_Name,Annotation,Annotation_Impact,
+                        Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
+                        REF,ALT=unlist(ALT))]
   )
   
+  
   # Set gene tier to 1,2 based on Cosmic
-  selection[SYMBOL %in% tumorgenes$`Gene Symbol` | SYMBOL %in% local_tumorgenes$V1]$Gene_Tier <- 2
-  selection[SYMBOL %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
+  selection[Gene_Name %in% tumorgenes$`Gene Symbol` | Gene_Name %in% local_tumorgenes$V1]$Gene_Tier <- 2
+  selection[Gene_Name %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
   selection <- selection[order(Gene_Tier)]
   
-  # Set Effect tiers: 
-  for (i in selection[Gene_Tier<3,.I]) {
-    symbol=selection$SYMBOL[i]
-    starts_at=selection$Starts_Near[i]
-    ends_at=selection$Ends_Near[i]
+  # Set Gene and Effect tiers: 
+  for (i in selection[,.I]) {
+    symbol=strsplit(selection$Gene_Name[i],'&')[[1]] # fusions are reported as "gene1&gene2"
+    if (any(symbol %in% tumorgenes$`Gene Symbol`)) selection$Gene_Tier[i]=2
+    if (any(symbol %in% tumorgenes[Tier==1,`Gene Symbol`])) selection$Gene_Tier[i]=1
+    
     length=abs(selection$SVLEN[i])
-    gene=tumorgenes[`Gene Symbol`==symbol,] # this gene from Cosmic table
+    gene=tumorgenes[`Gene Symbol` %in% symbol,] # this gene(s) from Cosmic table
     # first fusions/translocations
-    g=grep('fusion',gene$`Role in Cancer`)
-    if (length(g)>0) { # fusion gene yes
-      if (symbol %in% c(starts_at,ends_at)) { # and the start or end is at this (SYMBOL) gene
-        # now 1 if perfect match with Cosmic, 2 if partial match
-        mates=strsplit(gene$`Translocation Partner`,', ')[[1]] # this gene's common tx mates
-        if (starts_at != ends_at) { # if this symbol is either start or end, not both
-          if (starts_at %in% mates | ends_at %in% mates) { # and either is a member of known fusion mates
-            selection$Effect_Tier[i]=1 # common translocation/fusion
-            selection$Comment[i]=paste(selection$Comment[i],'known_fusion')
-          } else {
-            selection$Effect_Tier[i]=2 # then at least tier 2
-            selection$Comment[i]=paste0(selection$Comment[i],'partial_known_fusion')
-          }
-        }
-      }
+    if (selection$Annotation[i]=='gene_fusion') {
+      g=grep('fusion',gene$`Role in Cancer`)
+      if (length(g)>0) { # this is a fusion and either is fusion gene yes
+        selection$Effect_Tier[i]=2 # then at least tier 2
+        selection$Comment[i]='partial_known_fusion'
+      }    
+      # now 1 if perfect match with Cosmic
+      if (nrow(gene)>1) if (as.logical(grep(gene$`Gene Symbol`[2],gene$`Translocation Partner`[1]))) {
+        selection$Effect_Tier[i]=1 # common translocation/fusion
+        selection$Comment[i]='known_fusion'
+      } 
     }
     # then deletions
-    if (selection$SVTYPE[i]=='DEL' & length<3e6) {
+    if (selection$SVTYPE[i]=='DEL' & length<3e6) if (length(grep('ablation',selection$Annotation[i]))>0) { # small DEL, ablation effect
       g=grep('TSG',gene$`Role in Cancer`)
       if (length(g)>0) { # Tumor supressor gene yes
         selection$Effect_Tier[i]=1
@@ -947,7 +1007,7 @@ if (length(vep_Nstruct_file)>0) {
       }
     }
     # then amplifications
-    if (selection$SVTYPE[i]=='DUP' & length<5e6) {
+    if (selection$SVTYPE[i]=='DUP' & length<5e6) if (length(grep('duplication',selection$Annotation[i]))>0) { # small amp, dupplication effect
       g=grep('oncogene',gene$`Role in Cancer`)
       if (length(g)>0) { # Oncogene yes
         selection$Effect_Tier[i]=1
@@ -958,11 +1018,141 @@ if (length(vep_Nstruct_file)>0) {
       }
     }
     # last other disruptions
-    if (symbol %in% c(starts_at,ends_at)) { # if the start or end is at this (SYMBOL) gene
-      selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2) # some indication of effect!
-      selection$Comment[i]=paste(selection$Comment[i],'at_breakpoint')
+    if (length(grep('duplication',selection$Annotation[i])==0) &
+        length(grep('ablation',selection$Annotation[i])==0) &
+        length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
+      if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
+        if (selection$Annotation_Impact[i]=='HIGH') {
+      selection$Effect_Tier[i]=2 # some indication of effect!
+      selection$Comment[i]=paste(selection$Comment[i],'high_impact')
     }
   }
+  selection <- selection[order(Effect_Tier,Gene_Tier)]
+
+  
+  # # annotation is in the CSQ column.
+  # h=strsplit(info(header(nstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
+  # vep_header=strsplit(h,'\\|')[[1]]
+  # 
+  # # VEP annotation is put in annotation_table
+  # annotation_table=matrix(data = NA,nrow = length(unlist(nstruc$CSQ)),ncol = length(vep_header)+1)
+  # colnames(annotation_table)=c('N',vep_header)
+  # row=1
+  # for (i in 1:nrow(nstruc)) { # for each variant
+  #   # for each VEP annotation:
+  #   for (j in 1:length(nstruc$CSQ[[i]])) { 
+  #     line=strsplit(nstruc$CSQ[[i]][j],'\\|')[[1]]
+  #     annotation_table[row,1]=i
+  #     annotation_table[row,1+(1:length(line))]=line
+  #     row=row+1
+  #   }
+  # }
+  # annotation_table=as.data.table(annotation_table)
+  # 
+  # # Add to data
+  # nstruc$N=as.character(1:nrow(nstruc))
+  # manta_normal_table <- merge(nstruc,annotation_table,by='N')[order(cumstart),-1]
+  # 
+  # # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
+  # del_ok <- which(manta_normal_table$SVTYPE=='DEL' & abs(manta_normal_table$SVLEN)<3e6)
+  # # Amplification: consider <5M for amplification consequence, report census genes
+  # amp_ok <- which(manta_normal_table$SVTYPE=='DUP' & abs(manta_normal_table$SVLEN)<5e6)
+  # # Fusions/disrupting: Do the SVs start/end at gene? 
+  # manta_normal_table$Starts_Near <- ''
+  # manta_normal_table$Ends_Near <- ''
+  # manta_normal_table$Junction <- ''
+  # cumstart=allgenes$cumstart
+  # cumend=allgenes$cumend
+  # for (i in 1:nrow(manta_normal_table)) {
+  #   i=as.integer(i)
+  #   #cat(i,'\n')
+  #   g=manta_normal_table$SYMBOL[i]
+  #   # genes overlapping SV start
+  #   t=manta_normal_table$cumstart[i]
+  #   ix=cumstart-10e3 < t & cumend +10e3 > t
+  #   if (length(ix)>0) {
+  #     genes=allgenes[ix,unique(name)]
+  #     set(manta_normal_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
+  #     if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
+  #   }
+  #   # genes overlapping SV end
+  #   t=manta_normal_table$altcumpos[i]
+  #   ix=cumstart-10e3 < t & cumend +10e3 > t
+  #   if (length(ix)>0) {
+  #     genes=allgenes[ix,unique(name)]
+  #     set(manta_normal_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
+  #     if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
+  #   }
+  # }
+  # # Inside genes: Junctions may be putative fusion or knock-out if either end is "this" gene.
+  # afflicted_ok <- which(manta_normal_table$Junction=='Y')
+  # 
+  # ## Make new table with predicted effects
+  # selection <- unique(
+  #   manta_normal_table[unique(sort(c(del_ok, amp_ok, afflicted_ok))),
+  #                      .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
+  #                        SYMBOL,Starts_Near,Ends_Near,
+  #                        Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
+  #                        Consequence,REF,altpos,ALT=unlist(ALT))]
+  # )
+  # 
+  # # Set gene tier to 1,2 based on Cosmic
+  # selection[SYMBOL %in% tumorgenes$`Gene Symbol` | SYMBOL %in% local_tumorgenes$V1]$Gene_Tier <- 2
+  # selection[SYMBOL %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
+  # selection <- selection[order(Gene_Tier)]
+  # 
+  # # Set Effect tiers: 
+  # for (i in selection[Gene_Tier<3,.I]) {
+  #   symbol=selection$SYMBOL[i]
+  #   starts_at=selection$Starts_Near[i]
+  #   ends_at=selection$Ends_Near[i]
+  #   length=abs(selection$SVLEN[i])
+  #   gene=tumorgenes[`Gene Symbol`==symbol,] # this gene from Cosmic table
+  #   # first fusions/translocations
+  #   g=grep('fusion',gene$`Role in Cancer`)
+  #   if (length(g)>0) { # fusion gene yes
+  #     if (symbol %in% c(starts_at,ends_at)) { # and the start or end is at this (SYMBOL) gene
+  #       # now 1 if perfect match with Cosmic, 2 if partial match
+  #       mates=strsplit(gene$`Translocation Partner`,', ')[[1]] # this gene's common tx mates
+  #       if (starts_at != ends_at) { # if this symbol is either start or end, not both
+  #         if (starts_at %in% mates | ends_at %in% mates) { # and either is a member of known fusion mates
+  #           selection$Effect_Tier[i]=1 # common translocation/fusion
+  #           selection$Comment[i]=paste(selection$Comment[i],'known_fusion')
+  #         } else {
+  #           selection$Effect_Tier[i]=2 # then at least tier 2
+  #           selection$Comment[i]=paste0(selection$Comment[i],'partial_known_fusion')
+  #         }
+  #       }
+  #     }
+  #   }
+  #   # then deletions
+  #   if (selection$SVTYPE[i]=='DEL' & length<3e6) {
+  #     g=grep('TSG',gene$`Role in Cancer`)
+  #     if (length(g)>0) { # Tumor supressor gene yes
+  #       selection$Effect_Tier[i]=1
+  #       selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
+  #     } else { # else 2 unless already one
+  #       selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+  #       selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
+  #     }
+  #   }
+  #   # then amplifications
+  #   if (selection$SVTYPE[i]=='DUP' & length<5e6) {
+  #     g=grep('oncogene',gene$`Role in Cancer`)
+  #     if (length(g)>0) { # Oncogene yes
+  #       selection$Effect_Tier[i]=1
+  #       selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
+  #     } else {
+  #       selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+  #       selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
+  #     }
+  #   }
+  #   # last other disruptions
+  #   if (symbol %in% c(starts_at,ends_at)) { # if the start or end is at this (SYMBOL) gene
+  #     selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2) # some indication of effect!
+  #     selection$Comment[i]=paste(selection$Comment[i],'at_breakpoint')
+  #   }
+  # }
   
   # Add ASCAT LOH.
   for (i in 1:nrow(selection)) {
@@ -971,8 +1161,7 @@ if (length(vep_Nstruct_file)>0) {
       ascat_cnv$endpos>selection$end[i]
     if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
   }
-  selection <- selection[order(Effect_Tier,Gene_Tier)]
-  
+
   manta_normal_selected <- selection
   
   htmlTable(manta_normal_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
@@ -1048,12 +1237,12 @@ if (exists('tstruc')) {
   temp=allgenes[name %in% manta_tumor_selected$SYMBOL[manta_tumor_selected$Gene_Tier<3]]
   if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = cumstart,y = 1.45,label=name),
                                          data = temp,
-                                         size=2)
+                                         size=3)
   # add NORMAL data afflicted cosmic genes
   temp=allgenes[name %in% manta_normal_selected$SYMBOL[manta_normal_selected$Gene_Tier<3]]
   if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = cumstart,y = -1.55,label=name),
                                          data = temp,
-                                         size=2)
+                                         size=3)
   
   g
 }
@@ -1061,7 +1250,7 @@ if (exists('tstruc')) {
 
 
 
-## Somatic point mutations {.tabset}
+## Somatic point mutations {.active .tabset}
 
 ### Mutect 2
 <!-- Read annotated small variant data (Mutect 2) -->
@@ -1110,7 +1299,7 @@ if (length(mutect2_file)>0) {
   tmuts$reads[tmuts$AD>=5]='≥5'
   # "info"" annotations also need to be added
   tmuts=cbind(tmuts,as.data.table(info(vcf)))
-
+  
   ## get snpEff headers
   snpeff_header=strsplit(info(header(vcf))['ANN',][,3],'ions: \'')[[1]][2]
   snpeff_header=strsplit(snpeff_header,' \\| ')[[1]]
@@ -1142,7 +1331,7 @@ if (length(mutect2_file)>0) {
     }
   }
   
-
+  
   
   # Annotation table then concatenated 
   mutect2_table=cbind(tmuts,annotation_table)
@@ -1157,7 +1346,7 @@ if (length(mutect2_file)>0) {
   sift_deleterious=grep('deleterious',mutect2_table$SIFT)
   # And certain effects
   regulatory=c(grep('TF',mutect2_table$Consequence))#,grep('regulatory',mutect2_table$Consequence)) # <-  used below?
-
+  
   
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- mutect2_table[
@@ -1282,9 +1471,9 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   polyphen_damaging=grep('damaging',strelka_snvs$PolyPhen)
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',strelka_snvs$SIFT)
-   # And certain effects
+  # And certain effects
   regulatory=c(grep('TF',strelka_snvs$Consequence))#,grep('regulatory',strelka_snvs$Consequence)) # <-  used below?
-
+  
   
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- strelka_snvs[
@@ -1401,7 +1590,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   sift_deleterious=grep('deleterious',strelka_indels$SIFT)
   # And certain effects
   regulatory=c(grep('TF',strelka_indels$Consequence))#,grep('regulatory',strelka_indels$Consequence)) # <-  used below?
-
+  
   
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- strelka_snvs[
@@ -1487,7 +1676,7 @@ if (exists('mutect2_table')) {
   temp=mutect2_table[mutect2_table$filter=='PASS' & mutect2_table$Amino_acids!='',]
   g=g+geom_label_repel(data = temp,
                        mapping = aes(x=cumstart,y=TUMOR,label=paste(SYMBOL,Protein_position,Amino_acids)),
-                       inherit.aes = F,size=2,nudge_y = 0.2)
+                       inherit.aes = F,size=3,nudge_y = 0.2)
   
   
   g

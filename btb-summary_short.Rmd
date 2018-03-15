@@ -11,13 +11,27 @@ editor_options:
   chunk_output_type: console
 ---
 
-<!-- Logo -->
-<!-- ![](CAW_logo.png) -->
+<!-- CSS style for tables to look ok: -->
+<style>
 
+table, td, th {
+  border: none;
+  padding-left: 1em;
+  padding-right: 1em;
+  min-width: 50%;
+  <!-- max-width: 1600px; -->
+  margin-left: 1em;
+  margin-right: 1em;
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+
+</style>
 
 <!-- Markdown setup -->
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE,comment = '',warning=F,error = F)
+options(width = 600)
 ```
 
 # {.tabset .tabset-fade .tabset-pills}
