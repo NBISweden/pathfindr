@@ -130,7 +130,7 @@ sampleData <- data.table(
 ```{r}
 load('~/reports/swegen_hg38_allele_counts.Rdata') #  swegen_hg38_allele_counts
 load('~/reports/mutations_genes_ref.Rdata') #  cosmic,msk,oncokb
-load('~/reports/BTB_hg38_manta_counts.Rdata') #  btb_hg38_manta
+load('~/reports/Swegen_hg38_Manta_counts.Rdata') #  swegen_hg38_manta
 ```
 
 
@@ -561,13 +561,13 @@ if (length(vep_Tstruct_file)>0) {
   key$end[ix]=round(key$end[ix]/10)*10
   key=paste(key$chr,key$start,key$end,key$imprecise)
   ## which keys are in reference?
-  ix=key %in% btb_hg38_manta_pass$name 
-  ix=btb_hg38_manta_pass$name %in% key 
-  ix=key %in% btb_hg38_manta_all$name 
-  ix=btb_hg38_manta_all$name %in% key
+  ix=key %in% swegen_hg38_manta_pass$name 
+  ix=swegen_hg38_manta_pass$name %in% key 
+  ix=key %in% swegen_hg38_manta_all$name 
+  ix=swegen_hg38_manta_all$name %in% key
   # thus 1,5k reamins using "all" and 2,5k remains using "pass".
   # now using 2 observations as cutoff 
-  ix <- key %in% btb_hg38_manta_all[value>1]$name
+  ix <- key %in% swegen_hg38_manta_all[value>1]$name
   ## do the filter
   tstruc <- tstruc[!ix]
   
@@ -827,13 +827,16 @@ if (length(vep_Tstruct_file)>0) {
   #   }
   # }
   # 
+  
   # Add ASCAT LOH.
-  for (i in 1:nrow(selection)) {
+  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
     ix=ascat_cnv$chr==selection$chr[i] &
       ascat_cnv$startpos<selection$start[i] &
       ascat_cnv$endpos>selection$end[i]
-    if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
+    ix=ix[!is.na(ix)]
+    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
   }
+  
   
   manta_tumor_selected <- selection
   
@@ -877,13 +880,13 @@ if (length(vep_Nstruct_file)>0) {
   key$end[ix]=round(key$end[ix]/10)*10
   key=paste(key$chr,key$start,key$end,key$imprecise)
   ## which keys are in reference?
-  ix=key %in% btb_hg38_manta_pass$name # 11357. (why not all? this sample is in the reference.........)
-  ix=btb_hg38_manta_pass$name %in% key # all but 800 ≥2 obs
-  ix=key %in% btb_hg38_manta_all$name # 12559,
-  ix=btb_hg38_manta_all$name %in% key #  all but 799 ≥2 obs
-  # thus 1,5k reamins using "all" and 2,5k remains using "pass".
+  ix=key %in% swegen_hg38_manta_pass$name 
+  ix=swegen_hg38_manta_pass$name %in% key 
+  ix=key %in% swegen_hg38_manta_all$name 
+  ix=swegen_hg38_manta_all$name %in% key 
   # now using 2 observations as cutoff 
-  ix <- key %in% btb_hg38_manta_all[value>1]$name
+  ix <- key %in% swegen_hg38_manta_all[value>1,name]
+  # 390 of 10k remain with test sample
   ## do the filter
   nstruc <- nstruc[!ix]
   
@@ -959,14 +962,14 @@ if (length(vep_Nstruct_file)>0) {
   )
   
   
-
+  
   # Set Gene and Effect tiers: 
   for (i in selection[,.I]) {
     symbol=strsplit(selection$Gene_Name[i],'&')[[1]] # fusions are reported as "gene1&gene2"
-   
+    
     if (any(symbol %in% tumorgenes$`Gene Symbol`)) selection$Gene_Tier[i]=2
     if (any(symbol %in% tumorgenes[Tier==1,`Gene Symbol`]) & length(symbol)<3) selection$Gene_Tier[i]=1
-  
+    
     
     length=abs(selection$SVLEN[i])
     gene=tumorgenes[`Gene Symbol` %in% symbol,] # this gene(s) from Cosmic table
@@ -1143,11 +1146,12 @@ if (length(vep_Nstruct_file)>0) {
   # }
   
   # Add ASCAT LOH.
-  for (i in 1:nrow(selection)) {
+  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
     ix=ascat_cnv$chr==selection$chr[i] &
       ascat_cnv$startpos<selection$start[i] &
       ascat_cnv$endpos>selection$end[i]
-    if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
+    ix=ix[!is.na(ix)]
+    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
   }
   
   manta_normal_selected <- selection
@@ -1222,15 +1226,15 @@ if (exists('tstruc')) {
                                    arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
                                    inherit.aes = FALSE)
   # add TUMOR data afflicted cosmic genes
-  temp=allgenes[name %in% manta_tumor_selected$Gene_Name[manta_tumor_selected$Effect_Tier<3]]
-  if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = cumstart,y = 1.45,label=name),
-                                         data = temp,
-                                         size=3)
-  # add NORMAL data afflicted cosmic genes
-  temp=allgenes[name %in% manta_normal_selected$Gene_Name[manta_normal_selected$Effect_Tier<3]]
-  if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = cumstart,y = -1.55,label=name),
-                                         data = temp,
-                                         size=3)
+  # temp=allgenes[name %in% manta_tumor_selected$Gene_Name[manta_tumor_selected$Effect_Tier<3]]
+  # if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = cumstart,y = 1.45,label=name),
+  #                                        data = temp,
+  #                                        size=3)
+  # # # add NORMAL data afflicted cosmic genes
+  # temp=allgenes[name %in% manta_normal_selected$Gene_Name[manta_normal_selected$Effect_Tier<3]]
+  # if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = cumstart,y = -1.55,label=name),
+  #                                        data = temp,
+  #                                        size=3)
   
   g
 }
@@ -1272,6 +1276,15 @@ if (length(mutect2_file)>0) {
     ix=tmuts$chr==chrsz$chr[i]
     tmuts$cumstart[ix]=tmuts$start[ix]+chrsz$starts[i]
     tmuts$cumend[ix]=tmuts$end[ix]+chrsz$starts[i]
+  }
+  # Headers are sometimes sample names instead of TUMOR-NORMAL
+  headers=colnames(g$AD)
+  if (!'TUMOR' %in% headers) {
+    ix=grep('[TR]',headers)
+    headers[ix]='TUMOR'
+    headers[-ix]='NORMAL'
+    colnames(g$AD)=headers
+    colnames(g$AF)=headers # <-- assumes the same header order in AF
   }
   tad=t(as.data.frame((g$AD[,'TUMOR'])))   #<------- the fix so that T/N pos are not hard coded
   tsum=tad[,1]+tad[,2]
@@ -1370,15 +1383,17 @@ if (length(mutect2_file)>0) {
                                   selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
     selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
     
-    
-    # Add ASCAT LOH.
-    for (i in 1:nrow(selection)) {
-      ix=ascat_cnv$chr==selection$chr[i] &
-        ascat_cnv$startpos<selection$start[i] &
-        ascat_cnv$endpos>selection$end[i]
-      if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
-    }
   }
+  
+  # Add ASCAT LOH.
+  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+    ix=ascat_cnv$chr==selection$chr[i] &
+      ascat_cnv$startpos<selection$start[i] &
+      ascat_cnv$endpos>selection$end[i]
+    ix=ix[!is.na(ix)]
+    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
+  }
+  
   mutect2_selected <- selection[order(Effect_Tier,Gene_Tier)]
   
   htmlTable(mutect2_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
@@ -1508,15 +1523,17 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
     selection[is_hotspot_pos | (IMPACT=='HIGH' &
                                   selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
     selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
-    
-    # Add ASCAT LOH.
-    for (i in 1:nrow(selection)) {
-      ix=ascat_cnv$chr==selection$chr[i] &
-        ascat_cnv$startpos<selection$start[i] &
-        ascat_cnv$endpos>selection$end[i]
-      if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
-    }
   }
+  
+  # Add ASCAT LOH.
+  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+    ix=ascat_cnv$chr==selection$chr[i] &
+      ascat_cnv$startpos<selection$start[i] &
+      ascat_cnv$endpos>selection$end[i]
+    ix=ix[!is.na(ix)]
+    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
+  }
+  
   strelka_selected <- selection
   
   # indels are read and added below.
@@ -1638,14 +1655,19 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
                                   selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
     selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
     
-    # Add ASCAT LOH.
-    for (i in 1:nrow(selection)) {
-      ix=ascat_cnv$chr==selection$chr[i] &
-        ascat_cnv$startpos<selection$start[i] &
-        ascat_cnv$endpos>selection$end[i]
-      if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
-    }
+    
   }
+  
+  
+  # Add ASCAT LOH.
+  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+    ix=ascat_cnv$chr==selection$chr[i] &
+      ascat_cnv$startpos<selection$start[i] &
+      ascat_cnv$endpos>selection$end[i]
+    ix=ix[!is.na(ix)]
+    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
+  }
+  
   strelka_selected <- rbind(strelka_selected,selection)[order(Effect_Tier,Gene_Tier)]
   
   htmlTable(strelka_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
@@ -1924,14 +1946,17 @@ if (length(haplotypecaller_N_file)>0) {
     selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
     selection <- selection[order(Effect_Tier,Gene_Tier)]
     
-    # Add ASCAT LOH.
-    for (i in 1:nrow(selection)) {
-      ix=ascat_cnv$chr==selection$chr[i] &
-        ascat_cnv$startpos<selection$start[i] &
-        ascat_cnv$endpos>selection$end[i]
-      if (sum(ix) >0) if (ascat_cnv[ix,LOH]=='LOH') selection$LOH[i]='Y'
-    }
   }
+  
+  # Add ASCAT LOH.
+  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+    ix=ascat_cnv$chr==selection$chr[i] &
+      ascat_cnv$startpos<selection$start[i] &
+      ascat_cnv$endpos>selection$end[i]
+    ix=ix[!is.na(ix)]
+    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
+  }
+  
   
   haplotypecaller_selected <- selection
   
@@ -2060,16 +2085,16 @@ chromplot=function(thischr) if (T) {
         scale_color_manual(values=c("BND"="#E41A1C", "DEL"="#377EB8", "INV"="#4DAF4A", "INS"="#984EA3", "DUP"="#FF7F00"))+
         scale_linetype_manual(values=c('TRUE'=2,'FALSE'=1))
     # then diff chrom SVs
-    temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr!=tstruc$chr,]
-    if (nrow(temp)>0) { 
-      g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=2,label=listfix(temp$ALT)),
-                           inherit.aes = F,size=3)
-    }
+    # temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr!=tstruc$chr,]
+    # if (nrow(temp)>0) { 
+    #   g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=rep(2,nrow(temp)),label=altchr),
+    #                        inherit.aes = F,size=3)
+    # }
     # labels
-    temp=allgenes[name %in% manta_tumor_selected$Gene_Name[manta_tumor_selected$Effect_Tier<3 & manta_tumor_selected$chr==thischr]]
-    if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = start,y = 2,label=name),
-                                           data = temp,
-                                           size=3)
+    # temp=allgenes[name %in% manta_tumor_selected$Gene_Name[manta_tumor_selected$Effect_Tier<3 & manta_tumor_selected$chr==thischr]]
+    # if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = start,y = 2,label=name),
+    #                                        data = temp,
+    #                                        size=3)
   }
   ### NORMAL SVs
   # if (exists('nstruc')) if (nrow(nstruc)>0) {
@@ -2084,7 +2109,7 @@ chromplot=function(thischr) if (T) {
   #   # then diff chrom SVs
   #   temp=nstruc[nstruc$chr==thischr & nstruc$FILTER=='PASS' & nstruc$altchr!=nstruc$chr,]
   #   if (nrow(temp)>0) { 
-  #     g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=0.25,label=listfix(temp$ALT)),
+  #     g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=0.25,label=altchr),
   #                          inherit.aes = F,size=3)
   #   }
   #   # labels

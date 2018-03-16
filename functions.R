@@ -30,7 +30,7 @@ for (i in 1:nrow(chrsz)) {
 }
 # Cosmic genes have Tiers, Role in Cancer, Fusion, Germline/Somatic and much more....!!!!
 tumorgenes <- fread('~/Data//BTBdata//resources/COSMIC/cancer_gene_census.csv')
-local_tumorgenes <- fread('~/Data//BTBdata//resources/Teresita gene list/Brain_tumor_list_of_genes_2017.txt',header = F)
+local_tumorgenes <- fread('~/Data//BTBdata//resources/Teresita gene list/Gene_list_2018.csv',header = T)
 hotspots_inframe <- fread('~/Data//BTBdata//resources/MSK hotspots V2 (25000 samples)/hotspots_v2_inframe.csv')
 setkey(hotspots_inframe,Hugo_Symbol,Amino_Acid_Position)
 hotspots_snv <- fread('~/Data//BTBdata//resources/MSK hotspots V2 (25000 samples)/hotspots_v2_snv.csv')

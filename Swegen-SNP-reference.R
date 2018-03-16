@@ -128,3 +128,34 @@ tables()
 save(swegen_hg38_allele_counts,file='../resources/SWEGEN snps/swegen_hg38_allele_counts.Rdata',compress = F)
 
 
+
+
+
+### New code for reading individual VCFs
+library(VariantAnnotation)
+library(data.table)
+setwd('~')
+files=dir(path = 'swegenVCF',pattern = 'vcf.gz$',full.names = T)
+
+vcf=readGeno(files[1],x='GT')
+snptable=data.table(name=unique(rownames(vcf)),value=1)
+setkey(snptable,name)
+
+for (i in 2:length(files)) {
+  cat(i,files[i])
+  vcf=readGeno(files[i],x='GT')
+  cat('...read VCF.\n')
+  r=unique(rownames(vcf))
+  already_exists= r %in% snptable[,name]
+  update=snptable[,name] %in% r
+  add=!already_exists
+  snptable[update,'value']=snptable[update,'value']+1
+  snptable[r[add],'value']=1
+}
+
+save(snptable,file='snptable_swegen_fromVCF.Rdata',compress = F)
+
+
+
+
+

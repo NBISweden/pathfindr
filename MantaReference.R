@@ -11,6 +11,13 @@ files="~/Data/BTBdata/VEP/Manta_P2233_103T_vs_P2233_122N.diploidSV.ann.vcf" # du
 files=dir(pattern='diploidSV.vcf.vep.ann.vcf') # if annotated
 files=dir(pattern='diploidSV.vcf.gz') # if not annotated
 
+
+
+# For SWEGEN 
+folders=dir(path = 'Manta_SAMPLES/',include.dirs = T)
+files=paste0('Manta_SAMPLES/',folders,'/results/variants/diploidSV.vcf.gz') 
+
+
 for (file in files) {
   
   cat('now',file,'\n')
