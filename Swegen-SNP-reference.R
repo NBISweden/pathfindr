@@ -146,14 +146,20 @@ for (i in 2:length(files)) {
   vcf=readGeno(files[i],x='GT')
   cat('...read VCF.\n')
   r=unique(rownames(vcf))
-  already_exists= r %in% snptable[,name]
-  update=snptable[,name] %in% r
-  add=!already_exists
-  snptable[update,'value']=snptable[update,'value']+1
-  snptable[r[add],'value']=1
+  
+  m = match(r, snptable[,name])
+  
+  snptable[m,'value']=snptable[m,'value']+1
+  
+  new=data.table(name=r[is.na(m)],value=1)
+  snptable=rbind(snptable,new)
 }
 
+
 save(snptable,file='snptable_swegen_fromVCF.Rdata',compress = F)
+
+setkey(snptable,name)
+fwrite(snptable,file = '../resources/SWEGEN snps/snptable_swegen_fromVCF.csv')
 
 
 

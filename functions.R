@@ -1,3 +1,5 @@
+## Put all the right reference data in ~/reports
+
 library(data.table)
 
 
@@ -16,6 +18,8 @@ chrsz <- data.table(
              101842921, 90062641, 83189521, 80217361, 58560841, 64071721, 
              46656721, 50727961, 155682361, 56827081)
 )
+fwrite(chrsz,'~/reports/chr_data.csv')
+
 # from https://genome.ucsc.edu/cgi-bin/hgTable
 allgenes <- fread('~/Data/BTBdata//resources/Ensembl/Canonical_Gencode.txt')
 allgenes$chr <- substr(allgenes$`#hg38.knownCanonical.chrom`,4,6)
@@ -28,11 +32,17 @@ for (i in 1:nrow(chrsz)) {
   allgenes$cumstart[ix] <- allgenes$start[ix]+chrsz$starts[i]
   allgenes$cumend[ix] <- allgenes$end[ix]+chrsz$starts[i]
 }
+fwrite(allgenes,'~/reports/genes_ensemble_canonical.csv')
+
+
 # Cosmic genes have Tiers, Role in Cancer, Fusion, Germline/Somatic and much more....!!!!
-tumorgenes <- fread('~/Data//BTBdata//resources/COSMIC/cancer_gene_census.csv')
-local_tumorgenes <- fread('~/Data//BTBdata//resources/Teresita gene list/Gene_list_2018.csv',header = T)
+#tumorgenes <- fread('~/Data//BTBdata//resources/COSMIC/cancer_gene_census.csv')
+#fwrite(tumorgenes,'~/reports/cancer_gene_census.csv')
+
+#local_tumorgenes <- fread('~/Data//BTBdata//resources/Teresita gene list/Gene_list_2018.csv')
+#fwrite(local_tumorgenes,'~/reports/Gene_list_2018.csv')
+
 hotspots_inframe <- fread('~/Data//BTBdata//resources/MSK hotspots V2 (25000 samples)/hotspots_v2_inframe.csv')
-setkey(hotspots_inframe,Hugo_Symbol,Amino_Acid_Position)
 hotspots_snv <- fread('~/Data//BTBdata//resources/MSK hotspots V2 (25000 samples)/hotspots_v2_snv.csv')
 # to add: hotspots not in MSK-impact?? Are there any?
 oncokb_all <- fread('~/Data/BTBdata/resources/OncoKB/OncoKB-allAnnotatedVariants.txt')
@@ -59,7 +69,7 @@ familial_genes <- c("ALK", "APC", "ATM", "BAP1", "BLM", "BMPR1A", "BRCA1", "BRCA
 
 
 ## Save them as one file:
-save(chrsz,allgenes,tumorgenes,local_tumorgenes,hotspots_inframe,hotspots_snv,oncokb_act,oncokb_all,file='~/reports/mutations_genes_ref.Rdata')
+#save(chrsz,allgenes,tumorgenes,local_tumorgenes,hotspots_inframe,hotspots_snv,oncokb_act,oncokb_all,file='~/reports/mutations_genes_ref.Rdata')
 
 ## Small/structural variant filtering
 ## 2+ observations in SWEgen/other ref

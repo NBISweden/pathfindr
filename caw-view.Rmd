@@ -73,11 +73,11 @@ mutect2_file <- grep(pattern = glob2rx("*/Annotation/mutect2_*canon.vep.ann.pick
 if (length(mutect2_file)==0)
   mutect2_file <- grep(pattern = glob2rx("*Annotation/VEP/mutect2_*.vcf.vep.ann*.vcf"),files,value = T)[1] # <- bianca
 # snpEff + VEP Strelka snv file
-strelka_snv_file <- grep(pattern = glob2rx("*/Annotation/Strelka_*somatic_snvs.snpeff.ann.canon.vep.ann.pick.vcf"),files,value = T) # <- local
+strelka_snv_file <- grep(pattern = glob2rx("*/Annotation/Strelka_*somatic_snvs.snpeff.ann.canon.vep.ann.pick.PASS.recode.vcf"),files,value = T) # <- local
 if (length(strelka_snv_file)==0)
   strelka_snv_file <- grep(pattern = glob2rx("*Annotation/VEP/Strelka_*_somatic_snvs.vcf.vep.ann*.vcf"),files,value = T)[1] # <- bianca
 # snpEff + VEP Strelka indel file
-strelka_indel_file <- grep(pattern = glob2rx("*/Annotation/Strelka_*somatic_indels.snpeff.ann.canon.vep.ann.pick.vcf"),files,value = T) # <- local
+strelka_indel_file <- grep(pattern = glob2rx("*/Annotation/Strelka_*somatic_indels.snpeff.ann.canon.vep.ann.pick.PASS.recode.vcf"),files,value = T) # <- local
 if (length(strelka_indel_file)==0)
   strelka_indel_file <- grep(pattern = glob2rx("*Annotation/VEP/Strelka_*_somatic_indels.vcf.vep.ann*.vcf"),files,value = T)[1] # <- bianca
 
@@ -128,9 +128,14 @@ sampleData <- data.table(
 
 <!-- Reference data files -->
 ```{r}
-load('~/reports/swegen_hg38_allele_counts.Rdata') #  swegen_hg38_allele_counts
-load('~/reports/mutations_genes_ref.Rdata') #  cosmic,msk,oncokb
-load('~/reports/Swegen_hg38_Manta_counts.Rdata') #  swegen_hg38_manta
+snptable=fread('~/reports/swegen_snp_counts.csv') #  swegen_hg38_allele_counts
+setkey(snptable,name)
+swegen_hg38_manta_all=fread('~/reports/swegen_sv_counts.csv')
+chrsz=fread('~/reports/chr_data.csv')
+allgenes=fread('~/reports/genes_ensemble_canonical.csv')
+tumorgenes=fread('~/reports/cancer_gene_census.csv')
+hotspots_inframe=fread('~/reports/hotspots_v2_inframe.csv')
+hotspots_snv=fread('~/reports/hotspots_v2_snv.csv')
 ```
 
 
@@ -1249,6 +1254,13 @@ if (exists('tstruc')) {
 ```{r, echo=FALSE}
 if (length(mutect2_file)>0) {
   vcf=readVcf(file = mutect2_file,genome ='GRCh38')
+  
+  # first filter on Swegen SNPs/artefacts
+  in_ref=snptable[names(vcf)]
+  in_ref$value[is.na(in_ref$value)]=0
+  vcf=vcf[in_ref$value<3]
+
+  
   m2vcf <- vcf # for later export
   g=geno(vcf)
   inf=(info(vcf))
@@ -1271,6 +1283,8 @@ if (length(mutect2_file)>0) {
   tmuts$type[tmuts$type=='G>C']='C>G'
   tmuts$type[tmuts$type=='G>A']='C>T'
   tmuts$filter=rr$FILTER
+  tmuts$Swegen_count=snptable[names(vcf),value]
+  tmuts$Swegen_count[is.na(tmuts$Swegen_count)]=0
   # # for each chr get cumulative pos
   for (i in 1:nrow(chrsz)) {
     ix=tmuts$chr==chrsz$chr[i]
@@ -1311,14 +1325,14 @@ if (length(mutect2_file)>0) {
   # keep only PASS
   tmuts=tmuts[filter=='PASS',]
   
-  ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
-  # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
-  key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
-  key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
-  key1_refAF[is.na(value),1]=0
-  tmuts$allele1_swegen_count=key1_refAF$value
-  remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
-  tmuts <- tmuts[!remove,] # filtered.
+  # ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
+  # # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
+  # key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
+  # key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
+  # key1_refAF[is.na(value),1]=0
+  # tmuts$allele1_swegen_count=key1_refAF$value
+  # remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
+  # tmuts <- tmuts[!remove,] # filtered.
   
   
   # VEP annotation is put in annotation_table
@@ -1346,17 +1360,18 @@ if (length(mutect2_file)>0) {
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',mutect2_table$SIFT)
   # And certain effects
-  regulatory=c(grep('TF',mutect2_table$Consequence))#,grep('regulatory',mutect2_table$Consequence)) # <-  used below?
+  regulatory=c(grep('TF',mutect2_table$Consequence),grep('regulatory',mutect2_table$Consequence)) # <-  used below?
   
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- mutect2_table[
     keep,
-    .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+    .(VARIANT_CLASS,chr,start,end,Swegen_count,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
       MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
-      ref,alt,DP,AD,DPn,ADn,allele1_swegen_count)
+      ref,alt,DP,AD,DPn,ADn)
     ]
   if (nrow(selection)>0) {
     for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    selection$Protein_position[is.na(selection$Protein_position)]=''
     
     # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
     for (i in which(selection$SYMBOL=='')) {
@@ -1365,7 +1380,7 @@ if (length(mutect2_file)>0) {
                       end>selection$start[i]-1e5]
       if (nrow(near)>0) {
         near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
-        selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
       }
     }  
     
@@ -1373,8 +1388,8 @@ if (length(mutect2_file)>0) {
     selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
     selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
     
-    # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
-    selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
+    # Mutation effect: T2 (what?). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
+    selection$Effect_Tier[selection$IMPACT %in% c('HIGH','MODERATE')] <- 2
     temp=paste(selection$SYMBOL,selection$Protein_position)
     is_hotspot_pos <- 
       temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
@@ -1382,7 +1397,8 @@ if (length(mutect2_file)>0) {
     selection[is_hotspot_pos | (IMPACT=='HIGH' &
                                   selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
     selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
-    
+    selection <- selection[order(Effect_Tier,Gene_Tier)]
+ 
   }
   
   # Add ASCAT LOH.
@@ -1430,6 +1446,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   tmuts$type[tmuts$type=='G>C']='C>G'
   tmuts$type[tmuts$type=='G>A']='C>T'
   tmuts$filter=rr$FILTER
+  tmuts$Swegen_count=NA
   # # for each chr get cumulative pos
   for (i in 1:nrow(chrsz)) {
     ix=tmuts$chr==chrsz$chr[i]
@@ -1452,15 +1469,15 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # keep only PASS
   tmuts=tmuts[filter=='PASS',]
   
-  ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
-  # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
-  key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
-  key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
-  key1_refAF[is.na(value),1]=0
-  tmuts$allele1_swegen_count=key1_refAF$value
-  remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
-  tmuts <- tmuts[!remove,] # filtered.
-  
+  # ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
+  # # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
+  # key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
+  # key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
+  # key1_refAF[is.na(value),1]=0
+  # tmuts$allele1_swegen_count=key1_refAF$value
+  # remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
+  # tmuts <- tmuts[!remove,] # filtered.
+  # 
   
   # VEP annotation is put in annotation_table
   annotation_table=matrix(data = NA,nrow = nrow(tmuts),ncol = length(vep_header))
@@ -1476,6 +1493,16 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # Annotation table then concatenated 
   strelka_snvs=cbind(tmuts,annotation_table)
   
+  # Filter takes place here, as the variant rownames are not compatible with Swegen/Mutect/Haplotypecaller
+  # filter by RSID
+  rs_table=snptable[strelka_snvs$Existing_variation]
+  rs_table$value[is.na(rs_table$value)]=0
+  pos_table=snptable[strelka_snvs$names]
+  pos_table$value[is.na(pos_table$value)]=0
+  t=cbind(rs_table,pos_table)
+  t$maxvalue=apply(t[,c(2,4)],MARGIN = 1,FUN = max)
+  strelka_snvs$Swegen_count=t$maxvalue
+  strelka_snvs=strelka_snvs[Swegene_count<3]
   
   # Keep high/mod-relevance in final output
   impact=which(strelka_snvs$IMPACT %in% c('HIGH','MODERATE'))
@@ -1486,18 +1513,18 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',strelka_snvs$SIFT)
   # And certain effects
-  regulatory=c(grep('TF',strelka_snvs$Consequence))#,grep('regulatory',strelka_snvs$Consequence)) # <-  used below?
-  
+  regulatory=c(grep('TF',strelka_snvs$Consequence),grep('regulatory',strelka_snvs$Consequence)) # <-  used below?
   
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- strelka_snvs[
     keep,
-    .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+    .(VARIANT_CLASS,chr,start,end,Swegen_count,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
       MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
-      ref,alt,DP=DPt,DPn,allele1_swegen_count)
+      ref,alt,DP=DPt,DPn)
     ]
   if (nrow(selection)>0) {
     for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    selection$Protein_position[is.na(selection$Protein_position)]=''
     
     # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
     for (i in which(selection$SYMBOL=='')) {
@@ -1506,7 +1533,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
                       end>selection$start[i]-1e5]
       if (nrow(near)>0) {
         near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
-        selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
       }
     }  
     
@@ -1514,8 +1541,8 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
     selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
     selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
     
-    # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
-    selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
+    # Mutation effect: T2 (what?). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
+    selection$Effect_Tier[selection$IMPACT %in% c('HIGH','MODERATE')] <- 2
     temp=paste(selection$SYMBOL,selection$Protein_position)
     is_hotspot_pos <- 
       temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
@@ -1523,6 +1550,8 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
     selection[is_hotspot_pos | (IMPACT=='HIGH' &
                                   selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
     selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
+    selection <- selection[order(Effect_Tier,Gene_Tier)]
+    
   }
   
   # Add ASCAT LOH.
@@ -1562,6 +1591,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   tmuts$type[tmuts$type=='G>C']='C>G'
   tmuts$type[tmuts$type=='G>A']='C>T'
   tmuts$filter=rr$FILTER
+  tmuts$Swegen_count=NA
   # # for each chr get cumulative pos
   for (i in 1:nrow(chrsz)) {
     ix=tmuts$chr==chrsz$chr[i]
@@ -1582,14 +1612,14 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # keep only PASS
   tmuts=tmuts[filter=='PASS',]
   
-  ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
-  # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
-  key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
-  key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
-  key1_refAF[is.na(value),1]=0
-  tmuts$allele1_swegen_count=key1_refAF$value
-  remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
-  tmuts <- tmuts[!remove,] # filtered.
+  # ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
+  # # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
+  # key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
+  # key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
+  # key1_refAF[is.na(value),1]=0
+  # tmuts$allele1_swegen_count=key1_refAF$value
+  # remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
+  # tmuts <- tmuts[!remove,] # filtered.
   
   
   # VEP annotation is put in annotation_table
@@ -1606,6 +1636,16 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # Annotation table then concatenated 
   strelka_indels=cbind(tmuts,annotation_table)
   
+  # Filter takes place here, as the variant rownames are not compatible with Swegen/Mutect/Haplotypecaller
+  # filter by RSID
+  rs_table=snptable[strelka_indels$Existing_variation]
+  rs_table$value[is.na(rs_table$value)]=0
+  pos_table=snptable[strelka_indels$names]
+  pos_table$value[is.na(pos_table$value)]=0
+  t=cbind(rs_table,pos_table)
+  t$maxvalue=apply(t[,c(2,4)],MARGIN = 1,FUN = max)
+  strelka_indels$Swegen_count=t$maxvalue
+  strelka_indels=strelka_indels[Swegen_count<3]
   
   # Keep high/mod-relevance in final output
   impact=which(strelka_indels$IMPACT %in% c('HIGH','MODERATE'))
@@ -1616,18 +1656,19 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',strelka_indels$SIFT)
   # And certain effects
-  regulatory=c(grep('TF',strelka_indels$Consequence))#,grep('regulatory',strelka_indels$Consequence)) # <-  used below?
+  regulatory=c(grep('TF',strelka_indels$Consequence),grep('regulatory',strelka_indels$Consequence)) # <-  used below?
   
   
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- strelka_snvs[
     keep,
-    .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+    .(VARIANT_CLASS,chr,start,end,Swegen_count,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
       MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
-      ref,alt,DP=DPt,DPn,allele1_swegen_count)
+      ref,alt,DP=DPt,DPn)
     ]
   if (nrow(selection) > 0) {
     for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    selection$Protein_position[is.na(selection$Protein_position)]=''
     
     # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
     for (i in which(selection$SYMBOL=='')) {
@@ -1636,17 +1677,16 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
                       end>selection$start[i]-1e5]
       if (nrow(near)>0) {
         near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
-        selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
       }
     }  
-    
     
     # Genes in census or local list considered T2, census Tier1 then gets T1
     selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
     selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
     
-    # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
-    selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
+    # Mutation effect: T2 (what?). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
+    selection$Effect_Tier[selection$IMPACT %in% c('HIGH','MODERATE')] <- 2
     temp=paste(selection$SYMBOL,selection$Protein_position)
     is_hotspot_pos <- 
       temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
@@ -1654,8 +1694,8 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
     selection[is_hotspot_pos | (IMPACT=='HIGH' &
                                   selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
     selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
-    
-    
+    selection <- selection[order(Effect_Tier,Gene_Tier)]
+      
   }
   
   
@@ -1786,13 +1826,20 @@ if (exists('strelka_indels') &
 
 ## Germline point mutations {.tabset}
 
-### HaplotypeCaller (normal)
+### HaplotypeCaller (normal+tumor)
 <!-- Read annotated small variant data (Haplotype caller, normal) -->
 ```{r, echo=FALSE}
 if (length(haplotypecaller_N_file)>0) {
   vcf=readVcf(file = haplotypecaller_N_file,genome ='GRCh38')
+  in_ref=snptable[names(vcf)]
+  in_ref$value[is.na(in_ref$value)]=0
+  vcf=vcf[in_ref$value<3]  # 32000 kvar, bättre än de 97k som fanns kvar med alt 1 (och <2)
+  
   vcf_t=readVcf(file = haplotypecaller_T_file,genome ='GRCh38')
-  ix_NinT=match(names(vcf),names(vcf_t))
+  vcf_t=vcf_t[names(vcf_t) %in% names(vcf)] # 22k återstår, alltså bara var 3dje från N
+  vcf=vcf[names(vcf) %in% names(vcf_t)] # rensa även bort de som är specifika för N
+  vcf_t=vcf_t[match(names(vcf),names(vcf_t))] # ordning är nu matchad
+  ix_NinT=match(names(vcf),names(vcf_t)) # how to pick from vcf_t to match vcf (not really needed anymore)
   g=geno(vcf)
   g_t=geno(vcf_t)
   inf=(info(vcf))
@@ -1839,20 +1886,24 @@ if (length(haplotypecaller_N_file)>0) {
   nmuts$AF_t=apply(X = ad[,2:3],MARGIN = 1,FUN = max)/nmuts$DP_t
   
   
-  ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
-  # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
-  key1 <- paste(nmuts$chr,nmuts$start,nmuts$alt)
-  key2 <- paste(nmuts$chr,nmuts$start,nmuts$alt2)
-  has2 <- nmuts$alt2!=''
-  key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
-  key1_refAF[is.na(value),1]=0
-  key2_refAF <- swegen_hg38_allele_counts[key2,.(value)]
-  key2_refAF[is.na(value),1]=0
-  nmuts$allele1_swegen_count=key1_refAF$value
-  nmuts$allele2_swegen_count=key2_refAF$value
-  remove <- key1_refAF$value>=2 & (key2_refAF$value>=2 | !has2) #remove SNP if allele1 is ≥2 and (allele2 too or no second allele)
-  nmuts <- nmuts[!remove,] # filtered.
-  
+  # ## Before adding the (LARGE) info and annotation fields, filter with Swegen <-------  a better solution now applies.
+  # # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
+  # key1 <- paste(nmuts$chr,nmuts$start,nmuts$alt)
+  # key2 <- paste(nmuts$chr,nmuts$start,nmuts$alt2)
+  # has2 <- nmuts$alt2!=''
+  # key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
+  # key1_refAF[is.na(value),1]=0
+  # key2_refAF <- swegen_hg38_allele_counts[key2,.(value)]
+  # key2_refAF[is.na(value),1]=0
+  # nmuts$allele1_swegen_count=key1_refAF$value
+  # nmuts$allele2_swegen_count=key2_refAF$value
+  # remove <- key1_refAF$value>=2 & (key2_refAF$value>=2 | !has2) #remove SNP if allele1 is ≥2 and (allele2 too or no second allele)
+  # nmuts <- nmuts[!remove,] # filtered.  # 97k variants remained...
+
+  # add info on how many in Swegen
+  nmuts$Swegen_count=snptable[names(vcf),value]
+  nmuts$Swegen_count[is.na(nmuts$Swegen_count)]=0
+    
   # add type
   nmuts$type=paste0(nmuts$ref,'>',nmuts$alt)
   nmuts$type[nchar(nmuts$ref)>nchar(nmuts$alt)]='del'
@@ -1866,7 +1917,7 @@ if (length(haplotypecaller_N_file)>0) {
   nmuts$type[nmuts$type=='G>A']='C>T'
   
   # "info"" annotations also need to be added
-  nmuts=cbind(nmuts,as.data.table(info(vcf)[!remove,]))
+  nmuts=cbind(nmuts,as.data.table(info(vcf)))
   ## get snpEff headers
   #snpeff_header=strsplit(info(header(vcf))['ANN',][,3],'ions: \'')[[1]][2]
   #snpeff_header=strsplit(snpeff_header,' \\| ')[[1]]
@@ -1889,15 +1940,6 @@ if (length(haplotypecaller_N_file)>0) {
   haplotypecaller_table=cbind(nmuts,annotation_table)
   
   
-  # ## Where there is no gene, put those within 100kb
-  # t_genes=allgenes[allgenes$name %in% tumorgenes$`Gene Symbol`]
-  # for (i in which(haplotypecaller_table$SYMBOL=='')) {
-  #   ix=t_genes$cumstart < haplotypecaller_table$start[i] + 100000 &
-  #     t_genes$cumend > haplotypecaller_table$start[i] - 100000
-  #   if (sum(ix)>0) haplotypecaller_table$SYMBOL[i]=paste(t_genes$name[ix],collapse = ' ')
-  # }
-  
-  
   # Keep high/mod-relevance in final output
   impact=which(haplotypecaller_table$IMPACT %in% c('HIGH','MODERATE'))
   # Also keep Clinvar-pathogenic
@@ -1907,18 +1949,19 @@ if (length(haplotypecaller_N_file)>0) {
   # And SIFT-deleterious
   sift_deleterious=grep('deleterious',haplotypecaller_table$SIFT)
   # And certain effects
-  regulatory=c(grep('TF',haplotypecaller_table$Consequence))#,grep('regulatory',haplotypecaller_table$Consequence)) # <-  used below?
+  regulatory=c(grep('TF',haplotypecaller_table$Consequence),grep('regulatory',haplotypecaller_table$Consequence)) # <-  used below?
   
   keep_haplotypecaller <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory))) #,regulatory
   
   selection <- haplotypecaller_table[keep_haplotypecaller,
-                                     .(VARIANT_CLASS,chr,start,end,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',
+                                     .(VARIANT_CLASS,chr,start,end,Swegen_count,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',
                                        Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
                                        MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
-                                       ref,alt,alt2,DP,DP_t,RD,RD_t,AD,AD_t,AD2,AD2_t,allele1_swegen_count,allele2_swegen_count)]
+                                       ref,alt,alt2,DP,DP_t,RD,RD_t,AD,AD_t,AD2,AD2_t)]
   
   if (nrow(selection)>0) {  
     for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
+    selection$Protein_position[is.na(selection$Protein_position)]=''
     
     # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
     for (i in which(selection$SYMBOL=='')) {
@@ -1927,7 +1970,7 @@ if (length(haplotypecaller_N_file)>0) {
                       end>selection$start[i]-1e5]
       if (nrow(near)>0) {
         near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
-        selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
       }
     }  
     
@@ -1935,8 +1978,8 @@ if (length(haplotypecaller_N_file)>0) {
     selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$V1 | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
     selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
     
-    # Mutation effect: T2 if HIGH impact or (gene tier 1). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
-    selection$Effect_Tier[selection$IMPACT=='HIGH' | selection$Gene_Tier==1] <- 2
+    # Mutation effect: T2 (what?). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
+    selection$Effect_Tier[selection$IMPACT %in% c('HIGH','MODERATE')] <- 2
     temp=paste(selection$SYMBOL,selection$Protein_position)
     is_hotspot_pos <- 
       temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
@@ -2048,6 +2091,7 @@ chromplot=function(thischr) if (T) {
           axis.ticks.y=element_blank())#+
   
   # lines to separate parts of fig
+  g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=0.5,yend=0.5),alpha=1)
   g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-0.5,yend=-0.5),alpha=1)
   g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-1.5,yend=-1.5),alpha=1)
   g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-2.5,yend=-2.5),alpha=1)
