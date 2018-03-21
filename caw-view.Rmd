@@ -12,9 +12,11 @@ editor_options:
 
 <!-- This script reads from a folder containing (VEP+snpEff) annotated CAW (aka Sarek) output, including copy number from ControlFreec and Ascat, structural variation from Manta, somatic point mutations from Mutact 2 and Strelka, and germline mutations from HaplotypeCaller.-->
 
-<!-- CSS style for tables to look ok: -->
+<!-- CSS style for left alignment and for tables to look ok: -->
 <style>
-
+body {
+    position: absolute;
+    left: 42px;}
 table, td, th {
 border: none;
 padding-left: 1em;
@@ -247,36 +249,56 @@ if (length(freec_Tratio_file)>0 &
   # cnv file
   cnvs <- as.data.table(read.csv(freec_cnv_file,sep='\t',header=F))
   names(cnvs) <- c('chr','start','end','copies','effect','genotype','value','type','na')
-  cnvs$Gene_Tier <- 3
-  cnvs$Effect_Tier <- 3
-  cnvs$cosmic_genes <- ''
-  #cnvs$all_genes=''
-  # amplifications/duplications max 5MB, homdel max 3MB
-  cnvs <- cnvs#[(end-start < 5e6 & effect=='gain') | (end-start < 3e6 & copies==0)]
-  # add genes 
-  for (i in 1:nrow(cnvs)) {
-    all=allgenes[chr==cnvs$chr[i] & start<cnvs$end[i] & end>cnvs$start[i],name]
-    if (length(all)>0) { # if any genes in cnv
-      #cnvs$all_genes[i]=paste(all,collapse = ' ') # put in table
-      t2=all[(all %in% tumorgenes$`Gene Symbol`)] 
-      if (length(t2)>0) { # if any in cosmic
-        cnvs$cosmic_genes[i] <- paste(t2,collapse = ' ') # put in table
-        cnvs$Gene_Tier[i]=2
-        cnvs$Effect_Tier[i]=2
-        # if the effect is TSG loss or oncogene amp, Tier 1
-        if (cnvs$copies[i]==0) if (any(all %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`]))
-          cnvs$Effect_Tier[i]=1
-        if (cnvs$effect[i]=='gain') if (any(all %in% tumorgenes[grep('oncogene',`Role in Cancer`),`Gene Symbol`]))
-          cnvs$Effect_Tier[i]=1
+  freec_loh=cnvs[grep('^A*$',genotype)][type=='somatic'][copies<5]
+  cnvs=cnvs[effect!='neutral']
+  cnvs$rank_score <- 0
+  cnvs$rank_terms <- ''
+  cnvs$cancer_genes <- ''
+
+  for (i in cnvs[end-start < 10e6, .I]) {
+    all=allgenes[chr==cnvs$chr[i] & start<cnvs$end[i] & end>cnvs$start[i],name] # genes in segment
+    if (length(all)>0) { # if any genes
+      genes=tumorgenes[`Gene Symbol` %in% all] 
+      if (nrow(genes)>0) { # if any of our cancer genes
+        cnvs$cancer_genes[i] <- paste(genes$`Gene Symbol`,collapse = ' ') # put in table
+        if (any(genes$Tier==1,na.rm = T)) {
+          cnvs$rank_score[i]=3
+          cnvs$rank_terms[i]='cosmic_T1'
+        } else if (any(genes$Tier==2,na.rm = T)) {
+          cnvs$rank_score[i]=2
+          cnvs$rank_terms[i]='cosmic_T2'
+        } else {
+          cnvs$rank_score[i]=2
+          cnvs$rank_terms[i]='published_gene'
+        }
       }
-      t1=all[(all %in% tumorgenes[Tier==1,`Gene Symbol`])] 
-      if (length(t1)>0) { # if any in cosmic T1
-        cnvs$Gene_Tier[i]=1
-      }
+    }
+    
+    # if the effect is focal
+    if (cnvs[i,end-start]<2e6) {
+      cnvs$rank_score[i]=cnvs$rank_score[i]+1
+      cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'focal')
+    }
+    
+    # if the effect is loss/gain/amp etc
+    if (cnvs$copies[i]==0) {
+      cnvs$rank_score[i]=cnvs$rank_score[i]+2
+      cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'hz_loss')
+    } else if (cnvs$copies[i] > 5) {
+      cnvs$rank_score[i]=cnvs$rank_score[i]+2
+      cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'high_amp')
+    } else if (cnvs$copies[i] > 2) {
+      cnvs$rank_score[i]=cnvs$rank_score[i]+1
+      cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'dup')
+    } else if (cnvs$effect[i] =='loss') {
+      cnvs$rank_score[i]=cnvs$rank_score[i]+1
+      cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'del')
     }
   }
   
-  htmlTable(cnvs[order(Effect_Tier,Gene_Tier)], col.rgroup = c("none", "#F7F7F7")) #%>%
+  freec_cnv=cnvs[order(rank_score,decreasing = T)]
+  
+  htmlTable(freec_cnv, col.rgroup = c("none", "#F7F7F7")) #%>%
   #kable_styling(bootstrap_options = "striped",position = "left") %>%
   #scroll_box(width = "1400px", height = "600px")# %>%
   # row_spec(row = which(cnvs$Gene_Tier==2 | cnvs$Effect_Tier==2), background = "#FF500040") %>%
@@ -388,36 +410,86 @@ if (length(ascat_Tratio_file)>0 &
   # make CNA burden estimate from binned
   sampleData[['Ascat_CNA_burden']] <- round(ascat_binned[chr %in% 1:22,sum(abs(tratio-median(tratio))>0.1,na.rm = T)/.N]*100)
   
-  # table of findings from ascat_cnv
-  ascat_cnv$Gene_Tier <- 3
-  ascat_cnv$Effect_Tier <- 3
-  ascat_cnv$cosmic_genes <- ''
-  #ascat_cnv$all_genes=''
-  # amplifications/duplications max 5MB, homdel max 3MB
-  ascat_cnv <- ascat_cnv#[(endpos-startpos < 5e6 & nMajor+nMinor > 4) | (endpos-startpos < 3e6 & nMajor==0)]
-  # add genes 
-  for (i in 1:nrow(ascat_cnv)) {
-    all=allgenes[chr==ascat_cnv$chr[i] & start<ascat_cnv$endpos[i] & end>ascat_cnv$startpos[i],name]
-    if (length(all)>0) { # if any genes in cnv
-      #ascat_cnv$all_genes[i]=paste(all,collapse = ' ') # put in table
-      t2=all[(all %in% tumorgenes$`Gene Symbol`)] 
-      if (length(t2)>0) { # if any in cosmic
-        ascat_cnv$cosmic_genes[i] <- paste(t2,collapse = ' ') # put in table
-        ascat_cnv$Gene_Tier[i]=2
-        ascat_cnv$Effect_Tier[i]=2
-        # if the effect is TSG loss or oncogene amp, Tier 1
-        if (ascat_cnv$nMajor[i]==0) if (any(all %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`]))
-          ascat_cnv$Effect_Tier[i]=1
-        if (ascat_cnv$nMajor[i] > 4) if (any(all %in% tumorgenes[grep('oncogene',`Role in Cancer`),`Gene Symbol`]))
-          ascat_cnv$Effect_Tier[i]=1
-      }
-      t1=all[(all %in% tumorgenes[Tier==1,`Gene Symbol`])] 
-      if (length(t1)>0) { # if any in cosmic T1
-        ascat_cnv$Gene_Tier[i]=1
+  
+  ascat_loh=ascat_cnv[nMinor==0 & nMajor<5]
+  cnvs=ascat_cnv[nMajor+nMinor != 2]
+  cnvs$rank_score <- 0
+  cnvs$rank_terms <- ''
+  cnvs$cancer_genes <- ''
+
+  for (i in which(cnvs$endpos-cnvs$startpos < 5e6)) {
+    all=allgenes[chr==cnvs$chr[i] & start<cnvs$end[i] & end>cnvs$start[i],name] # genes in segment
+    if (length(all)>0) { # if any genes
+      genes=tumorgenes[`Gene Symbol` %in% all] 
+      if (nrow(genes)>0) { # if any of our cancer genes
+        cnvs$cancer_genes[i] <- paste(genes$`Gene Symbol`,collapse = ' ') # put in table
+        if (any(genes$Tier==1,na.rm = T)) {
+          cnvs$rank_score[i]=3
+          cnvs$rank_terms[i]='cosmic_T1'
+        } else if (any(genes$Tier==2,na.rm = T)) {
+          cnvs$rank_score[i]=2
+          cnvs$rank_terms[i]='cosmic_T2'
+        } else {
+          cnvs$rank_score[i]=2
+          cnvs$rank_terms[i]='published_gene'
+        }
       }
     }
+    
+    # if the effect is focal
+    if (cnvs[i,endpos-startpos]<2e6) {
+      cnvs$rank_score[i]=cnvs$rank_score[i]+1
+      cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'focal')
+    }
+    
+    # if the effect is loss/gain/amp etc
+    if (cnvs[i,nMajor+nMinor]==0) {
+      cnvs$rank_score[i]=cnvs$rank_score[i]+2
+      cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'hz_loss')
+    } else if (cnvs[i,nMajor+nMinor] > 5) {
+      cnvs$rank_score[i]=cnvs$rank_score[i]+2
+      cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'amp')
+    } else if (cnvs[i,nMajor+nMinor] > 2) {
+      cnvs$rank_score[i]=cnvs$rank_score[i]+1
+      cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'dup')
+    } else if (cnvs[i,nMajor+nMinor] < 2) {
+      cnvs$rank_score[i]=cnvs$rank_score[i]+1
+      cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'del')
+    }
   }
-  htmlTable(ascat_cnv[order(Effect_Tier,Gene_Tier),], col.rgroup = c("none", "#F7F7F7")) #%>%
+  
+  ascat_cnv=cnvs[order(rank_score,decreasing = T)]
+
+  # # table of findings from ascat_cnv
+  # ascat_cnv$Gene_Tier <- 3
+  # ascat_cnv$Effect_Tier <- 3
+  # ascat_cnv$cosmic_genes <- ''
+  # #ascat_cnv$all_genes=''
+  # # amplifications/duplications max 5MB, homdel max 3MB
+  # ascat_cnv <- ascat_cnv#[(endpos-startpos < 5e6 & nMajor+nMinor > 4) | (endpos-startpos < 3e6 & nMajor==0)]
+  # # add genes 
+  # for (i in 1:nrow(ascat_cnv)) {
+  #   all=allgenes[chr==ascat_cnv$chr[i] & start<ascat_cnv$endpos[i] & end>ascat_cnv$startpos[i],name]
+  #   if (length(all)>0) { # if any genes in cnv
+  #     #ascat_cnv$all_genes[i]=paste(all,collapse = ' ') # put in table
+  #     t2=all[(all %in% tumorgenes$`Gene Symbol`)] 
+  #     if (length(t2)>0) { # if any in cosmic
+  #       ascat_cnv$cosmic_genes[i] <- paste(t2,collapse = ' ') # put in table
+  #       ascat_cnv$Gene_Tier[i]=2
+  #       ascat_cnv$Effect_Tier[i]=2
+  #       # if the effect is TSG loss or oncogene amp, Tier 1
+  #       if (ascat_cnv$nMajor[i]==0) if (any(all %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`]))
+  #         ascat_cnv$Effect_Tier[i]=1
+  #       if (ascat_cnv$nMajor[i] > 4) if (any(all %in% tumorgenes[grep('oncogene',`Role in Cancer`),`Gene Symbol`]))
+  #         ascat_cnv$Effect_Tier[i]=1
+  #     }
+  #     t1=all[(all %in% tumorgenes[Tier==1,`Gene Symbol`])] 
+  #     if (length(t1)>0) { # if any in cosmic T1
+  #       ascat_cnv$Gene_Tier[i]=1
+  #     }
+  #   }
+  # }
+  htmlTable(ascat_cnv, col.rgroup = c("none", "#F7F7F7")) #%>%
   #kable_styling(bootstrap_options = "striped",position = "left") %>%
   #scroll_box(width = "1400px", height = "600px")
 }
@@ -474,7 +546,7 @@ if (exists('tratio')) {
 
 #### Scatter plot
 <!-- Scatter plot -->
-```{r, echo=FALSE,fig.width=8,fig.height=4,warning=F}
+```{r, echo=FALSE,fig.width=15,fig.height=8,warning=F}
 if (exists('binned')) {
   binned$tmaf[binned$tmaf<0]=1
   g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.3,3))+
@@ -539,7 +611,7 @@ if (exists('ascat_tratio')) {
 
 #### Scatter plot
 <!-- Scatter plot -->
-```{r, echo=FALSE,fig.width=8,fig.height=4,warning=F}
+```{r, echo=FALSE,fig.width=15,fig.height=8,warning=F}
 if (exists('ascat_binned')) {
   #ascat_binned$tmaf[ascat_binned$tmaf<0]=1
   g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.3,3))+
@@ -569,7 +641,7 @@ if (length(vep_Tstruct_file)>0) {
   rr=rowRanges(tstruc_vcf)
   
   # manipulate into a data frame with relevant data, "info"" annotations also need to be added
-  tstruc=cbind(data.table(THISID=names(rr)),as.data.table(rr),as.data.table(inf))[FILTER=='PASS' & IMPRECISE==F,]
+  tstruc=cbind(data.table(THISID=names(rr)),as.data.table(rr),as.data.table(inf))[FILTER=='PASS']
   tstruc$SVLEN=listfix(tstruc$SVLEN)
   setkey(x = tstruc,THISID)
   tstruc$chr <- substr(x = tstruc$seqnames,start = 4,stop = 6)
@@ -688,50 +760,52 @@ if (length(vep_Tstruct_file)>0) {
       
       length=abs(selection$SVLEN[i])
       gene=tumorgenes[`Gene Symbol` %in% symbol,] # this gene(s) from Cosmic table
-      # first fusions/translocations
-      if (selection$Annotation[i]=='gene_fusion') {
-        g=grep('fusion',gene$`Role in Cancer`)
-        if (length(g)>0) { # this is a fusion and either is fusion gene yes
-          selection$Effect_Tier[i]=2 # then at least tier 2
-          selection$Comment[i]='partial_known_fusion'
-        }    
-        # now 1 if perfect match with Cosmic
-        if (nrow(gene)>1) if (as.logical(grep(gene$`Gene Symbol`[2],gene$`Translocation Partner`[1]))) {
-          selection$Effect_Tier[i]=1 # common translocation/fusion
-          selection$Comment[i]='known_fusion'
-        } 
-      }
-      # then deletions
-      if (selection$SVTYPE[i]=='DEL' & length<3e6) if (length(grep('ablation',selection$Annotation[i]))>0) { # small DEL, ablation effect
-        g=grep('TSG',gene$`Role in Cancer`)
-        if (length(g)>0) { # Tumor supressor gene yes
-          selection$Effect_Tier[i]=1
-          selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
-        } else { # else 2 unless already one
-          selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
-          selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
+      if (nrow(gene)>0) {
+        # first fusions/translocations
+        if (selection$Annotation[i]=='gene_fusion') {
+          g=grep('fusion',gene$`Role in Cancer`)
+          if (length(g)>0) { # this is a fusion and either is fusion gene yes
+            selection$Effect_Tier[i]=1 # then at least tier 1/2?
+            selection$Comment[i]='partial_known_fusion'
+          }    
+          # now 1 if perfect match with Cosmic
+          if (nrow(gene)>1) if (as.logical(grep(gene$`Gene Symbol`[2],gene$`Translocation Partner`[1]))) {
+            selection$Effect_Tier[i]=1 # common translocation/fusion
+            selection$Comment[i]='known_fusion'
+          } 
         }
-      }
-      # then amplifications
-      if (selection$SVTYPE[i]=='DUP' & length<5e6) if (length(grep('duplication',selection$Annotation[i]))>0) { # small amp, dupplication effect
-        g=grep('oncogene',gene$`Role in Cancer`)
-        if (length(g)>0) { # Oncogene yes
-          selection$Effect_Tier[i]=1
-          selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
-        } else {
-          selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
-          selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
-        }
-      }
-      # last other disruptions
-      if (length(grep('duplication',selection$Annotation[i])==0) &
-          length(grep('ablation',selection$Annotation[i])==0) &
-          length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
-        if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
-          if (selection$Annotation_Impact[i]=='HIGH') {
-            selection$Effect_Tier[i]=2 # some indication of effect!
-            selection$Comment[i]=paste(selection$Comment[i],'high_impact')
+        # then deletions
+        if (selection$SVTYPE[i]=='DEL' & length<3e6) if (length(grep('ablation',selection$Annotation[i]))>0) { # small DEL, ablation effect
+          g=grep('TSG',gene$`Role in Cancer`)
+          if (length(g)>0) { # Tumor supressor gene yes
+            selection$Effect_Tier[i]=1
+            selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
+          } else { # else 2 unless already one
+            selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+            selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
           }
+        }
+        # then amplifications
+        if (selection$SVTYPE[i]=='DUP' & length<5e6) if (length(grep('duplication',selection$Annotation[i]))>0) { # small amp, dupplication effect
+          g=grep('oncogene',gene$`Role in Cancer`)
+          if (length(g)>0) { # Oncogene yes
+            selection$Effect_Tier[i]=1
+            selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
+          } else {
+            selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+            selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
+          }
+        }
+        # last other disruptions
+        if (length(grep('duplication',selection$Annotation[i])==0) &
+            length(grep('ablation',selection$Annotation[i])==0) &
+            length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
+          if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
+            if (selection$Annotation_Impact[i]=='HIGH') {
+              selection$Effect_Tier[i]=2 # some indication of effect!
+              selection$Comment[i]=paste(selection$Comment[i],'high_impact')
+            }
+      }
     }
     selection <- selection[order(Effect_Tier,Gene_Tier)]
     
@@ -896,7 +970,7 @@ if (length(vep_Nstruct_file)>0) {
   rr=rowRanges(nstruc_vcf)
   
   # manipulate into a data frame with relevant data, "info"" annotations also need to be added
-  nstruc=cbind(data.table(THISID=names(rr)),as.data.table(rr),as.data.table(inf))[FILTER=='PASS' & IMPRECISE==FALSE]
+  nstruc=cbind(data.table(THISID=names(rr)),as.data.table(rr),as.data.table(inf))[FILTER=='PASS']
   nstruc$SVLEN=listfix(nstruc$SVLEN)
   setkey(x = nstruc,THISID)
   nstruc$chr <- substr(x = nstruc$seqnames,start = 4,stop = 6)
@@ -1014,50 +1088,52 @@ if (length(vep_Nstruct_file)>0) {
     
     length=abs(selection$SVLEN[i])
     gene=tumorgenes[`Gene Symbol` %in% symbol,] # this gene(s) from Cosmic table
-    # first fusions/translocations
-    if (selection$Annotation[i]=='gene_fusion') {
-      g=grep('fusion',gene$`Role in Cancer`)
-      if (length(g)>0) { # this is a fusion and either is fusion gene yes
-        selection$Effect_Tier[i]=2 # then at least tier 2
-        selection$Comment[i]='partial_known_fusion'
-      }    
-      # now 1 if perfect match with Cosmic
-      if (nrow(gene)>1) if (as.logical(grep(gene$`Gene Symbol`[2],gene$`Translocation Partner`[1]))) {
-        selection$Effect_Tier[i]=1 # common translocation/fusion
-        selection$Comment[i]='known_fusion'
-      } 
-    }
-    # then deletions
-    if (selection$SVTYPE[i]=='DEL' & length<3e6) if (length(grep('ablation',selection$Annotation[i]))>0) { # small DEL, ablation effect
-      g=grep('TSG',gene$`Role in Cancer`)
-      if (length(g)>0) { # Tumor supressor gene yes
-        selection$Effect_Tier[i]=1
-        selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
-      } else { # else 2 unless already one
-        selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
-        selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
+    if (nrow(gene)>0) {
+      # first fusions/translocations
+      if (length(grep('fusion',selection$Annotation[i]))>0) {
+        g=grep('fusion',gene$`Role in Cancer`)
+        if (length(g)>0) { # this is a fusion and either end is fusion gene yes
+          selection$Effect_Tier[i]=1 # then at least tier 1/2?
+          selection$Comment[i]='partial_known_fusion'
+        }    
+        # if perfect match with Cosmic
+        if (nrow(gene)>1) if (as.logical(grep(gene$`Gene Symbol`[2],gene$`Translocation Partner`[1]))) {
+          selection$Effect_Tier[i]=1 # common translocation/fusion
+          selection$Comment[i]='known_fusion'
+        } 
       }
-    }
-    # then amplifications
-    if (selection$SVTYPE[i]=='DUP' & length<5e6) if (length(grep('duplication',selection$Annotation[i]))>0) { # small amp, dupplication effect
-      g=grep('oncogene',gene$`Role in Cancer`)
-      if (length(g)>0) { # Oncogene yes
-        selection$Effect_Tier[i]=1
-        selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
-      } else {
-        selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
-        selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
-      }
-    }
-    # last other disruptions
-    if (length(grep('duplication',selection$Annotation[i])==0) &
-        length(grep('ablation',selection$Annotation[i])==0) &
-        length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
-      if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
-        if (selection$Annotation_Impact[i]=='HIGH') {
-          selection$Effect_Tier[i]=2 # some indication of effect!
-          selection$Comment[i]=paste(selection$Comment[i],'high_impact')
+      # then deletions
+      if (selection$SVTYPE[i]=='DEL' & length<3e6) if (length(grep('ablation',selection$Annotation[i]))>0) { # small DEL, ablation effect
+        g=grep('TSG',gene$`Role in Cancer`)
+        if (length(g)>0) { # Tumor supressor gene yes
+          selection$Effect_Tier[i]=1
+          selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
+        } else { # else 2 unless already one
+          selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+          selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
         }
+      }
+      # then amplifications
+      if (selection$SVTYPE[i]=='DUP' & length<5e6) if (length(grep('duplication',selection$Annotation[i]))>0) { # small amp, dupplication effect
+        g=grep('oncogene',gene$`Role in Cancer`)
+        if (length(g)>0) { # Oncogene yes
+          selection$Effect_Tier[i]=1
+          selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
+        } else {
+          selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+          selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
+        }
+      }
+      # last other disruptions
+      if (length(grep('duplication',selection$Annotation[i])==0) &
+          length(grep('ablation',selection$Annotation[i])==0) &
+          length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
+        if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
+          if (selection$Annotation_Impact[i]=='HIGH') {
+            selection$Effect_Tier[i]=2 # some indication of effect!
+            selection$Comment[i]=paste(selection$Comment[i],'high_impact')
+          }
+    }
   }
   selection <- selection[order(Effect_Tier,Gene_Tier)]
   
@@ -2112,7 +2188,7 @@ if (exists('strelka_selected')) if (nrow(strelka_selected)>0) {
 }
 if (exists('haplotypecaller_selected')) if (nrow(haplotypecaller_selected)>0) {
   t=unique(haplotypecaller_selected[Effect_Tier<=2 & Gene_Tier<=2,
-                            .(Protein_position,Amino_acids,SYMBOL,LOH,Gene_Tier,Effect_Tier)])
+                                    .(Protein_position,Amino_acids,SYMBOL,LOH,Gene_Tier,Effect_Tier)])
   if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
                                                     Somatic='germline',
                                                     Gene=t$SYMBOL,

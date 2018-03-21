@@ -13,7 +13,9 @@ editor_options:
 
 <!-- CSS style for tables to look ok: -->
 <style>
-
+body {
+    position: absolute;
+    left: 0px;}
 table, td, th {
   border: none;
   padding-left: 1em;
