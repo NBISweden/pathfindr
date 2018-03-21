@@ -2054,7 +2054,8 @@ if (length(haplotypecaller_N_file)>0) {
   keep_haplotypecaller <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory))) #,regulatory
   
   selection <- haplotypecaller_table[keep_haplotypecaller,
-                                     .(VARIANT_CLASS,Existing_variation,chr,start,end,Swegen_count,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',
+                                     .(VARIANT_CLASS,Existing_variation,chr,start,end,
+                                       Swegen_count,SYMBOL,Protein_position,Amino_acids,rank_score=0,rank_terms='',LOH='',
                                        Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
                                        MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
                                        ref,alt,alt2,DP,DP_t,RD,RD_t,AD,AD_t,AD2,AD2_t)]
@@ -2063,45 +2064,95 @@ if (length(haplotypecaller_N_file)>0) {
     for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
     selection$Protein_position[is.na(selection$Protein_position)]=''
     
-    # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
+    # if cancer genes within 100k of variant with no symbol (e.g. regulatory), assign (one, by tier) as symbol
     for (i in which(selection$SYMBOL=='')) {
       near=allgenes[chr==selection$chr[i] &
                       start<selection$end[i]+1e5 &
                       end>selection$start[i]-1e5]
       if (nrow(near)>0) {
         near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
-        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier,na.last = T),`Gene Symbol`][1]
       }
     }  
     
-    # Genes in census or local list considered T2, census Tier1 then gets T1
-    selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$Gene | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
-    selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
+    # Add gene scores
+    ix=selection$SYMBOL %in% tumorgenes$`Gene Symbol`[which(tumorgenes$Tier==1)]
+    selection$rank_score[ix]=3
+    selection$rank_terms[ix]='cosmic_T1'
+    ix=selection$SYMBOL %in% tumorgenes$`Gene Symbol`[which(tumorgenes$Tier==2)]
+    selection$rank_score[ix]=2
+    selection$rank_terms[ix]='cosmic_T2'
+    ix=selection$SYMBOL %in% tumorgenes$`Gene Symbol`[which(is.na(tumorgenes$Tier) & tumorgenes$`Gene Symbol`!='')]
+    selection$rank_score[ix]=2
+    selection$rank_terms[ix]='published_gene'
     
-    # Mutation effect: T2 (what?). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
-    selection$Effect_Tier[selection$IMPACT %in% c('HIGH','MODERATE')] <- 2
+    # Add high impact
+    ix=selection$IMPACT=='HIGH'
+    if (any(ix)) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'high_impact')
+    }
+    
+    # Add clinvar pathogenic
+    ix=grep('pathogenic',selection$CLIN_SIG)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'pathogenic')
+    }
+    
+    # Add hotspots
     temp=paste(selection$SYMBOL,selection$Protein_position)
-    is_hotspot_pos <- 
+    ix <-
       temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
       temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
-    selection[is_hotspot_pos | (IMPACT=='HIGH' &
-                                  selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
-    selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
-    selection <- selection[order(Effect_Tier,Gene_Tier)]
+    if (any(ix)) {
+      selection$rank_score[ix]=selection$rank_score[ix]+3
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'hotspot')
+    }
     
+    # Add trancription factors
+    ix=grep('TF',selection$Consequence)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+1
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TFBS')
+    }
+    
+    # Add regulatory
+    ix=grep('regulatory',selection$Consequence)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+1
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'regulatory')
+    }
+    
+    # old rank sys
+    # # Genes in census or local list considered T2, census Tier1 then gets T1
+    # selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$Gene | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
+    # selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
+    # 
+    # # Mutation effect: T2 (what?). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
+    # selection$Effect_Tier[selection$IMPACT %in% c('HIGH','MODERATE')] <- 2
+    # temp=paste(selection$SYMBOL,selection$Protein_position)
+    # is_hotspot_pos <- 
+    #   temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
+    #   temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
+    # selection[is_hotspot_pos | (IMPACT=='HIGH' &
+    #                               selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
+    # selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
+    # selection <- selection[order(Effect_Tier,Gene_Tier)]
+    # 
   }
   
   # Add ASCAT LOH.
   if (nrow(selection)>0) for (i in 1:nrow(selection)) {
-    ix=ascat_cnv$chr==selection$chr[i] &
-      ascat_cnv$startpos<selection$start[i] &
-      ascat_cnv$endpos>selection$end[i]
+    ix=freec_loh$chr==selection$chr[i] &
+      freec_loh$start<selection$start[i] &
+      freec_loh$end>selection$end[i]
     ix=ix[!is.na(ix)]
-    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
+    if (sum(ix) >0) selection$LOH[i]='Y'
   }
   
   
-  haplotypecaller_selected <- selection
+  haplotypecaller_selected <- selection[order(rank_terms)][order(rank_score,decreasing = T)]
   
   htmlTable(haplotypecaller_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
   #kable_styling(bootstrap_options = "striped",position = "left") %>%
