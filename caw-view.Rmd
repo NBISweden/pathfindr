@@ -15,14 +15,16 @@ editor_options:
 <!-- CSS style for left alignment and for tables to look ok: -->
 <style>
 body {
-    position: absolute;
-    left: 42px;}
+position: absolute;
+left: 42px;}
+.main-container {max-width: none !important;}
 table, td, th {
 border: none;
 padding-left: 1em;
 padding-right: 1em;
 min-width: 100%;
-max-width: 1200px;
+word-wrap: break-word;
+max-width: 200px;
 margin-left: auto;
 margin-right: auto;
 margin-top: 1em;
@@ -254,7 +256,7 @@ if (length(freec_Tratio_file)>0 &
   cnvs$rank_score <- 0
   cnvs$rank_terms <- ''
   cnvs$cancer_genes <- ''
-
+  
   for (i in cnvs[end-start < 10e6, .I]) {
     all=allgenes[chr==cnvs$chr[i] & start<cnvs$end[i] & end>cnvs$start[i],name] # genes in segment
     if (length(all)>0) { # if any genes
@@ -275,7 +277,7 @@ if (length(freec_Tratio_file)>0 &
     }
     
     # if the effect is focal
-    if (cnvs[i,end-start]<2e6) {
+    if (cnvs[i,end-start]<3e6) {
       cnvs$rank_score[i]=cnvs$rank_score[i]+1
       cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'focal')
     }
@@ -416,7 +418,7 @@ if (length(ascat_Tratio_file)>0 &
   cnvs$rank_score <- 0
   cnvs$rank_terms <- ''
   cnvs$cancer_genes <- ''
-
+  
   for (i in which(cnvs$endpos-cnvs$startpos < 5e6)) {
     all=allgenes[chr==cnvs$chr[i] & start<cnvs$end[i] & end>cnvs$start[i],name] # genes in segment
     if (length(all)>0) { # if any genes
@@ -437,7 +439,7 @@ if (length(ascat_Tratio_file)>0 &
     }
     
     # if the effect is focal
-    if (cnvs[i,endpos-startpos]<2e6) {
+    if (cnvs[i,endpos-startpos]<3e6) {
       cnvs$rank_score[i]=cnvs$rank_score[i]+1
       cnvs$rank_terms[i]=paste(cnvs$rank_terms[i],'focal')
     }
@@ -459,7 +461,7 @@ if (length(ascat_Tratio_file)>0 &
   }
   
   ascat_cnv=cnvs[order(rank_score,decreasing = T)]
-
+  
   # # table of findings from ascat_cnv
   # ascat_cnv$Gene_Tier <- 3
   # ascat_cnv$Effect_Tier <- 3
@@ -732,82 +734,129 @@ if (length(vep_Tstruct_file)>0) {
     manta_tumor_table <- merge(tstruc,snpEff_table,by='N')[order(cumstart),-1][nchar(Gene_Name)<40]
     
     # Deletion: remove deletions >3MB for "xxx_ablation" consequences
-    del_rm <- intersect(which(abs(manta_tumor_table$SVLEN)>3e6),
-                        grep('ablation',manta_tumor_table$Annotation,fixed))
-    # Amplification: remove >5M for 'duplication' consequences, report census genes
-    amp_rm <- intersect(which(abs(manta_tumor_table$SVLEN)>5e6),
+    del_rm <- intersect(which(abs(manta_tumor_table[,altpos-start])>3e6),
+                        grep('ablation',manta_tumor_table$Annotation))
+    # Amplification: remove >5M for 'duplication' consequences,
+    amp_rm <- intersect(which(abs(manta_tumor_table[,altpos-start])>5e6),
                         grep('duplication',manta_tumor_table$Annotation))
+    
     keep=rep(T,nrow(manta_tumor_table)) 
     keep[union(del_rm,amp_rm)]=F
     
     ## Make new table with predicted effects
     selection <- unique(
-      manta_tumor_table[keep,
+      manta_tumor_table[, # <---- not using "keep"
                         .(SVTYPE,ID=THISID,chr,start,end,Swegen_count,
                           altchr,altpos,SVLEN=unlist(SVLEN),
-                          Allele,Gene_Name,Annotation,Annotation_Impact,
-                          Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
+                          Gene_Name,rank_score=0,rank_terms='',LOH='',Comment='',
+                          Annotation,Annotation_Impact,Allele,
                           REF,ALT=unlist(ALT))]
     )
     
-    
-    # Set Gene and Effect tiers: 
-    for (i in selection[,.I]) {
-      symbol=strsplit(selection$Gene_Name[i],'&')[[1]] # fusions are reported as "gene1&gene2"
+    if (nrow(selection)>0) {  
       
-      if (any(symbol %in% tumorgenes$`Gene Symbol`)) selection$Gene_Tier[i]=2
-      if (any(symbol %in% tumorgenes[Tier==1,`Gene Symbol`]) & length(symbol)<3) selection$Gene_Tier[i]=1
+      for (gene in unique(selection$Gene_Name)) if (gene!='') {
+        ix=selection$Gene_Name==gene
+        gene=strsplit(gene,'&')[[1]]
+        # Add gene scores
+        if (any(gene %in% tumorgenes$`Gene Symbol`[which(tumorgenes$Tier==1)])) {
+          selection$rank_score[ix]=3
+          selection$rank_terms[ix]='cosmic_T1'
+        } else if (any(gene %in% tumorgenes$`Gene Symbol`[which(tumorgenes$Tier==2)])) {
+          selection$rank_score[ix]=2
+          selection$rank_terms[ix]='cosmic_T2'
+        }
+      }
       
-      length=abs(selection$SVLEN[i])
-      gene=tumorgenes[`Gene Symbol` %in% symbol,] # this gene(s) from Cosmic table
-      if (nrow(gene)>0) {
-        # first fusions/translocations
-        if (selection$Annotation[i]=='gene_fusion') {
-          g=grep('fusion',gene$`Role in Cancer`)
-          if (length(g)>0) { # this is a fusion and either is fusion gene yes
-            selection$Effect_Tier[i]=1 # then at least tier 1/2?
-            selection$Comment[i]='partial_known_fusion'
-          }    
-          # now 1 if perfect match with Cosmic
-          if (nrow(gene)>1) if (as.logical(grep(gene$`Gene Symbol`[2],gene$`Translocation Partner`[1]))) {
-            selection$Effect_Tier[i]=1 # common translocation/fusion
-            selection$Comment[i]='known_fusion'
-          } 
-        }
-        # then deletions
-        if (selection$SVTYPE[i]=='DEL' & length<3e6) if (length(grep('ablation',selection$Annotation[i]))>0) { # small DEL, ablation effect
-          g=grep('TSG',gene$`Role in Cancer`)
-          if (length(g)>0) { # Tumor supressor gene yes
-            selection$Effect_Tier[i]=1
-            selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
-          } else { # else 2 unless already one
-            selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
-            selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
-          }
-        }
-        # then amplifications
-        if (selection$SVTYPE[i]=='DUP' & length<5e6) if (length(grep('duplication',selection$Annotation[i]))>0) { # small amp, dupplication effect
-          g=grep('oncogene',gene$`Role in Cancer`)
-          if (length(g)>0) { # Oncogene yes
-            selection$Effect_Tier[i]=1
-            selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
-          } else {
-            selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
-            selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
-          }
-        }
-        # last other disruptions
-        if (length(grep('duplication',selection$Annotation[i])==0) &
-            length(grep('ablation',selection$Annotation[i])==0) &
-            length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
-          if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
-            if (selection$Annotation_Impact[i]=='HIGH') {
-              selection$Effect_Tier[i]=2 # some indication of effect!
-              selection$Comment[i]=paste(selection$Comment[i],'high_impact')
-            }
+      # Add high impact
+      ix=selection$Annotation_Impact=='HIGH'
+      if (any(ix)) {
+        selection$rank_score[ix]=selection$rank_score[ix]+2
+        selection$rank_terms[ix]=paste(selection$rank_terms[ix],'high_impact')
+      }
+      
+      # +1 for focal
+      ix=selection$chr==selection$altchr & selection$end-selection$start < 3e6 & selection$altpos-selection$start < 3e6
+      if (any(ix)) {
+        selection$rank_score[ix]=selection$rank_score[ix]+1
+        selection$rank_terms[ix]=paste(selection$rank_terms[ix],'focal')
+      }
+      
+      # +1 for fusion
+      ix=grep('fusion',selection$Annotation)
+      if (length(ix)>0) {
+        selection$rank_score[ix]=selection$rank_score[ix]+1
+        selection$rank_terms[ix]=paste(selection$rank_terms[ix],'fusion')
       }
     }
-    selection <- selection[order(Effect_Tier,Gene_Tier)]
+    
+    # Add Control Freec LOH.
+    if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+      ix=freec_loh$chr==selection$chr[i] &
+        freec_loh$start<selection$start[i] &
+        freec_loh$end>selection$end[i]
+      ix=ix[!is.na(ix)]
+      if (sum(ix) >0) selection$LOH[i]='Y'
+    }
+    
+    
+    # # Set Gene and Effect tiers: 
+    # for (i in selection[,.I]) {
+    #   symbol=strsplit(selection$Gene_Name[i],'&')[[1]] # fusions are reported as "gene1&gene2"
+    #   
+    #   if (any(symbol %in% tumorgenes$`Gene Symbol`)) selection$Gene_Tier[i]=2
+    #   if (any(symbol %in% tumorgenes[Tier==1,`Gene Symbol`]) & length(symbol)<3) selection$Gene_Tier[i]=1
+    #   
+    #   length=abs(selection$SVLEN[i])
+    #   gene=tumorgenes[`Gene Symbol` %in% symbol,] # this gene(s) from Cosmic table
+    #   if (nrow(gene)>0) {
+    #     # first fusions/translocations
+    #     if (selection$Annotation[i]=='gene_fusion') {
+    #       g=grep('fusion',gene$`Role in Cancer`)
+    #       if (length(g)>0) { # this is a fusion and either is fusion gene yes
+    #         selection$Effect_Tier[i]=1 # then at least tier 1/2?
+    #         selection$Comment[i]='partial_known_fusion'
+    #       }    
+    #       # now 1 if perfect match with Cosmic
+    #       if (nrow(gene)>1) if (as.logical(grep(gene$`Gene Symbol`[2],gene$`Translocation Partner`[1]))) {
+    #         selection$Effect_Tier[i]=1 # common translocation/fusion
+    #         selection$Comment[i]='known_fusion'
+    #       } 
+    #     }
+    #     # then deletions
+    #     if (selection$SVTYPE[i]=='DEL' & length<3e6) if (length(grep('ablation',selection$Annotation[i]))>0) { # small DEL, ablation effect
+    #       g=grep('TSG',gene$`Role in Cancer`)
+    #       if (length(g)>0) { # Tumor supressor gene yes
+    #         selection$Effect_Tier[i]=1
+    #         selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
+    #       } else { # else 2 unless already one
+    #         selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+    #         selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
+    #       }
+    #     }
+    #     # then amplifications
+    #     if (selection$SVTYPE[i]=='DUP' & length<5e6) if (length(grep('duplication',selection$Annotation[i]))>0) { # small amp, dupplication effect
+    #       g=grep('oncogene',gene$`Role in Cancer`)
+    #       if (length(g)>0) { # Oncogene yes
+    #         selection$Effect_Tier[i]=1
+    #         selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
+    #       } else {
+    #         selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
+    #         selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
+    #       }
+    #     }
+    #     # last other disruptions
+    #     if (length(grep('duplication',selection$Annotation[i])==0) &
+    #         length(grep('ablation',selection$Annotation[i])==0) &
+    #         length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
+    #       if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
+    #         if (selection$Annotation_Impact[i]=='HIGH') {
+    #           selection$Effect_Tier[i]=2 # some indication of effect!
+    #           selection$Comment[i]=paste(selection$Comment[i],'high_impact')
+    #         }
+    #   }
+    # }
+    # selection <- selection[order(Effect_Tier,Gene_Tier)]
     
     
     # # VEP annotation is in the CSQ column.
@@ -935,27 +984,25 @@ if (length(vep_Tstruct_file)>0) {
     #   }
     # }
     # 
+    # 
+    # # Add ASCAT LOH.
+    # if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+    #   ix=ascat_cnv$chr==selection$chr[i] &
+    #     ascat_cnv$startpos<selection$start[i] &
+    #     ascat_cnv$endpos>selection$end[i]
+    #   ix=ix[!is.na(ix)]
+    #   if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
+    # }
     
-    # Add ASCAT LOH.
-    if (nrow(selection)>0) for (i in 1:nrow(selection)) {
-      ix=ascat_cnv$chr==selection$chr[i] &
-        ascat_cnv$startpos<selection$start[i] &
-        ascat_cnv$endpos>selection$end[i]
-      ix=ix[!is.na(ix)]
-      if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
-    }
     
     
-    manta_tumor_selected <- selection
-    htmlTable(manta_tumor_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
-    #kable_styling(bootstrap_options = "striped",position = "left") %>%
-    #column_spec(7, width = "20em") %>%
-    #column_spec(9, width = "20em") %>%
-    #scroll_box(width = "1400px", height = "600px")
-    
-  } else {
-    manta_tumor_selected <- data.table()
   }
+  manta_tumor_selected <- selection[order(rank_score,decreasing = T)]
+  htmlTable(manta_tumor_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
+  #kable_styling(bootstrap_options = "striped",position = "left") %>%
+  #column_spec(7, width = "20em") %>%
+  #column_spec(9, width = "20em") %>%
+  #scroll_box(width = "1400px", height = "600px")
   
 }
 ```
@@ -1067,76 +1114,61 @@ if (length(vep_Nstruct_file)>0) {
   keep[union(del_rm,amp_rm)]=F
   
   ## Make new table with predicted effects
-  selection <- unique(
-    manta_normal_table[keep,
-                       .(SVTYPE,ID=THISID,chr,start,end,Swegen_count,
-                         altchr,altpos,SVLEN=unlist(SVLEN),
-                         Allele,Gene_Name,Annotation,Annotation_Impact,
-                         Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
-                         REF,ALT=unlist(ALT))]
-  )
-  
-  
-  
-  # Set Gene and Effect tiers: 
-  for (i in selection[,.I]) {
-    symbol=strsplit(selection$Gene_Name[i],'&')[[1]] # fusions are reported as "gene1&gene2"
+    selection <- unique(
+      manta_normal_table[, # <---- not using "keep"
+                        .(SVTYPE,ID=THISID,chr,start,end,Swegen_count,
+                          altchr,altpos,SVLEN=unlist(SVLEN),
+                          Gene_Name,rank_score=0,rank_terms='',LOH='',Comment='',
+                          Annotation,Annotation_Impact,Allele,
+                          REF,ALT=unlist(ALT))]
+    )
     
-    if (any(symbol %in% tumorgenes$`Gene Symbol`)) selection$Gene_Tier[i]=2
-    if (any(symbol %in% tumorgenes[Tier==1,`Gene Symbol`]) & length(symbol)<3) selection$Gene_Tier[i]=1
-    
-    
-    length=abs(selection$SVLEN[i])
-    gene=tumorgenes[`Gene Symbol` %in% symbol,] # this gene(s) from Cosmic table
-    if (nrow(gene)>0) {
-      # first fusions/translocations
-      if (length(grep('fusion',selection$Annotation[i]))>0) {
-        g=grep('fusion',gene$`Role in Cancer`)
-        if (length(g)>0) { # this is a fusion and either end is fusion gene yes
-          selection$Effect_Tier[i]=1 # then at least tier 1/2?
-          selection$Comment[i]='partial_known_fusion'
-        }    
-        # if perfect match with Cosmic
-        if (nrow(gene)>1) if (as.logical(grep(gene$`Gene Symbol`[2],gene$`Translocation Partner`[1]))) {
-          selection$Effect_Tier[i]=1 # common translocation/fusion
-          selection$Comment[i]='known_fusion'
-        } 
-      }
-      # then deletions
-      if (selection$SVTYPE[i]=='DEL' & length<3e6) if (length(grep('ablation',selection$Annotation[i]))>0) { # small DEL, ablation effect
-        g=grep('TSG',gene$`Role in Cancer`)
-        if (length(g)>0) { # Tumor supressor gene yes
-          selection$Effect_Tier[i]=1
-          selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
-        } else { # else 2 unless already one
-          selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
-          selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
+    if (nrow(selection)>0) {  
+      
+      for (gene in unique(selection$Gene_Name)) if (gene!='') {
+        ix=selection$Gene_Name==gene
+        gene=strsplit(gene,'&')[[1]]
+        # Add gene scores
+        if (any(gene %in% tumorgenes$`Gene Symbol`[which(tumorgenes$Tier==1)])) {
+          selection$rank_score[ix]=3
+          selection$rank_terms[ix]='cosmic_T1'
+        } else if (any(gene %in% tumorgenes$`Gene Symbol`[which(tumorgenes$Tier==2)])) {
+          selection$rank_score[ix]=2
+          selection$rank_terms[ix]='cosmic_T2'
         }
       }
-      # then amplifications
-      if (selection$SVTYPE[i]=='DUP' & length<5e6) if (length(grep('duplication',selection$Annotation[i]))>0) { # small amp, dupplication effect
-        g=grep('oncogene',gene$`Role in Cancer`)
-        if (length(g)>0) { # Oncogene yes
-          selection$Effect_Tier[i]=1
-          selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
-        } else {
-          selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
-          selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
-        }
+      
+      # Add high impact
+      ix=selection$Annotation_Impact=='HIGH'
+      if (any(ix)) {
+        selection$rank_score[ix]=selection$rank_score[ix]+2
+        selection$rank_terms[ix]=paste(selection$rank_terms[ix],'high_impact')
       }
-      # last other disruptions
-      if (length(grep('duplication',selection$Annotation[i])==0) &
-          length(grep('ablation',selection$Annotation[i])==0) &
-          length(grep('fusion',selection$Annotation[i]))==0) # if not dup/del/fusion
-        if (any(symbol %in% tumorgenes$`Gene Symbol`)) # and if in cosmic
-          if (selection$Annotation_Impact[i]=='HIGH') {
-            selection$Effect_Tier[i]=2 # some indication of effect!
-            selection$Comment[i]=paste(selection$Comment[i],'high_impact')
-          }
+      
+      # +1 for focal
+      ix=selection$chr==selection$altchr & selection$end-selection$start < 3e6 & selection$altpos-selection$start < 3e6
+      if (any(ix)) {
+        selection$rank_score[ix]=selection$rank_score[ix]+1
+        selection$rank_terms[ix]=paste(selection$rank_terms[ix],'focal')
+      }
+      
+      # +1 for fusion
+      ix=grep('fusion',selection$Annotation)
+      if (length(ix)>0) {
+        selection$rank_score[ix]=selection$rank_score[ix]+1
+        selection$rank_terms[ix]=paste(selection$rank_terms[ix],'fusion')
+      }
     }
-  }
-  selection <- selection[order(Effect_Tier,Gene_Tier)]
-  
+    
+    # Add Control Freec LOH.
+    if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+      ix=freec_loh$chr==selection$chr[i] &
+        freec_loh$start<selection$start[i] &
+        freec_loh$end>selection$end[i]
+      ix=ix[!is.na(ix)]
+      if (sum(ix) >0) selection$LOH[i]='Y'
+    }
+      
   
   # # annotation is in the CSQ column.
   # h=strsplit(info(header(nstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
@@ -1261,15 +1293,14 @@ if (length(vep_Nstruct_file)>0) {
   #     selection$Comment[i]=paste(selection$Comment[i],'at_breakpoint')
   #   }
   # }
-  
-  # Add ASCAT LOH.
-  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
-    ix=ascat_cnv$chr==selection$chr[i] &
-      ascat_cnv$startpos<selection$start[i] &
-      ascat_cnv$endpos>selection$end[i]
-    ix=ix[!is.na(ix)]
-    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
-  }
+  # # Add ASCAT LOH.
+  # if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+  #   ix=ascat_cnv$chr==selection$chr[i] &
+  #     ascat_cnv$startpos<selection$start[i] &
+  #     ascat_cnv$endpos>selection$end[i]
+  #   ix=ix[!is.na(ix)]
+  #   if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
+  # }
   
   manta_normal_selected <- selection
   
@@ -1467,7 +1498,7 @@ if (length(mutect2_file)>0) {
   mutect2_table=cbind(tmuts,annotation_table)
   
   # Keep high/mod-relevance in final output
-  impact=which(mutect2_table$IMPACT %in% c('HIGH','MODERATE'))
+  impact=which(mutect2_table$IMPACT %in% c('HIGH','MODERATE','MODIFIER'))
   # Also keep Clinvar-pathogenic
   clinvar_pathogenic=grep('pathogenic',mutect2_table$CLIN_SIG)
   # And PolyPhen-damaging
@@ -1480,52 +1511,91 @@ if (length(mutect2_file)>0) {
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
   selection <- mutect2_table[
     keep,
-    .(VARIANT_CLASS,Existing_variation,chr,start,end,Swegen_count,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+    .(VARIANT_CLASS,Existing_variation,chr,start,end,
+      Swegen_count,SYMBOL,Protein_position,Amino_acids,rank_score=0,rank_terms='',LOH='',
+      Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
       MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
       ref,alt,DP,AD,DPn,ADn)
     ]
-  if (nrow(selection)>0) {
+  
+  
+  
+  if (nrow(selection)>0) {  
     for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
     selection$Protein_position[is.na(selection$Protein_position)]=''
     
-    # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
+    # if cancer genes within 100k of variant with no symbol (e.g. regulatory), assign (one, by tier) as symbol
     for (i in which(selection$SYMBOL=='')) {
       near=allgenes[chr==selection$chr[i] &
                       start<selection$end[i]+1e5 &
                       end>selection$start[i]-1e5]
       if (nrow(near)>0) {
         near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
-        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier,na.last = T),`Gene Symbol`][1]
       }
     }  
     
-    # Genes in census or local list considered T2, census Tier1 then gets T1
-    selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$Gene | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
-    selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
+    # Add gene scores
+    ix=selection$SYMBOL %in% tumorgenes$`Gene Symbol`[which(tumorgenes$Tier==1)]
+    selection$rank_score[ix]=3
+    selection$rank_terms[ix]='cosmic_T1'
+    ix=selection$SYMBOL %in% tumorgenes$`Gene Symbol`[which(tumorgenes$Tier==2)]
+    selection$rank_score[ix]=2
+    selection$rank_terms[ix]='cosmic_T2'
+    ix=selection$SYMBOL %in% tumorgenes$`Gene Symbol`[which(is.na(tumorgenes$Tier) & tumorgenes$`Gene Symbol`!='')]
+    selection$rank_score[ix]=2
+    selection$rank_terms[ix]='published_gene'
     
-    # Mutation effect: T2 (what?). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
-    selection$Effect_Tier[selection$IMPACT %in% c('HIGH','MODERATE')] <- 2
+    # Add high impact
+    ix=selection$IMPACT=='HIGH'
+    if (any(ix)) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'high_impact')
+    }
+    
+    # Add clinvar pathogenic
+    ix=grep('pathogenic',selection$CLIN_SIG)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'pathogenic')
+    }
+    
+    # Add hotspots
     temp=paste(selection$SYMBOL,selection$Protein_position)
-    is_hotspot_pos <- 
+    ix <-
       temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
       temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
-    selection[is_hotspot_pos | (IMPACT=='HIGH' &
-                                  selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
-    selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
-    selection <- selection[order(Effect_Tier,Gene_Tier)]
+    if (any(ix)) {
+      selection$rank_score[ix]=selection$rank_score[ix]+3
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'hotspot')
+    }
     
+    # Add trancription factors
+    ix=grep('TF',selection$Consequence)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+1
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TFBS')
+    }
+    
+    # Add regulatory
+    ix=grep('regulatory',selection$Consequence)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+1
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'regulatory')
+    }
   }
   
-  # Add ASCAT LOH.
+  # Add Control Freec LOH.
   if (nrow(selection)>0) for (i in 1:nrow(selection)) {
-    ix=ascat_cnv$chr==selection$chr[i] &
-      ascat_cnv$startpos<selection$start[i] &
-      ascat_cnv$endpos>selection$end[i]
+    ix=freec_loh$chr==selection$chr[i] &
+      freec_loh$start<selection$start[i] &
+      freec_loh$end>selection$end[i]
     ix=ix[!is.na(ix)]
-    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
+    if (sum(ix) >0) selection$LOH[i]='Y'
   }
   
-  mutect2_selected <- selection[order(Effect_Tier,Gene_Tier)]
+  
+  mutect2_selected <- selection[order(rank_score,decreasing = T)]
   
   htmlTable(mutect2_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
   #kable_styling(bootstrap_options = "striped",position = "left") %>%
@@ -1620,7 +1690,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   strelka_snvs=strelka_snvs[Swegen_count<5]
   
   # Keep high/mod-relevance in final output
-  impact=which(strelka_snvs$IMPACT %in% c('HIGH','MODERATE'))
+  impact=which(strelka_snvs$IMPACT %in% c('HIGH','MODERATE','MODIFIER'))
   # Also keep Clinvar-pathogenic
   clinvar_pathogenic=grep('pathogenic',strelka_snvs$CLIN_SIG)
   # And PolyPhen-damaging
@@ -1637,51 +1707,8 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
       MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
       ref,alt,DP=DPt,DPn)
     ]
-  if (nrow(selection)>0) {
-    for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
-    selection$Protein_position[is.na(selection$Protein_position)]=''
-    
-    # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
-    for (i in which(selection$SYMBOL=='')) {
-      near=allgenes[chr==selection$chr[i] &
-                      start<selection$end[i]+1e5 &
-                      end>selection$start[i]-1e5]
-      if (nrow(near)>0) {
-        near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
-        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
-      }
-    }  
-    
-    # Genes in census or local list considered T2, census Tier1 then gets T1
-    selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$Gene | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
-    selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
-    
-    # Mutation effect: T2 (what?). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
-    selection$Effect_Tier[selection$IMPACT %in% c('HIGH','MODERATE')] <- 2
-    temp=paste(selection$SYMBOL,selection$Protein_position)
-    is_hotspot_pos <- 
-      temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
-      temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
-    selection[is_hotspot_pos | (IMPACT=='HIGH' &
-                                  selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
-    selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
-    selection <- selection[order(Effect_Tier,Gene_Tier)]
-    
-  }
-  
-  # Add ASCAT LOH.
-  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
-    ix=ascat_cnv$chr==selection$chr[i] &
-      ascat_cnv$startpos<selection$start[i] &
-      ascat_cnv$endpos>selection$end[i]
-    ix=ix[!is.na(ix)]
-    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
-  }
-  
-  strelka_selected <- selection
   
   # indels are read and added below.
-  
   
   ## Read Strelka indels
   vcf=readVcf(file = strelka_indel_file,genome ='GRCh38')
@@ -1763,7 +1790,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   strelka_indels=strelka_indels[Swegen_count<5]
   
   # Keep high/mod-relevance in final output
-  impact=which(strelka_indels$IMPACT %in% c('HIGH','MODERATE'))
+  impact=which(strelka_indels$IMPACT %in% c('HIGH','MODERATE','MODIFIER'))
   # Also keep Clinvar-pathogenic
   clinvar_pathogenic=grep('pathogenic',strelka_indels$CLIN_SIG)
   # And PolyPhen-damaging
@@ -1775,55 +1802,89 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   
   
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
-  selection <- strelka_snvs[
-    keep,
-    .(VARIANT_CLASS,Existing_variation,chr,start,end,Swegen_count,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
-      MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
-      ref,alt,DP=DPt,DPn)
-    ]
-  if (nrow(selection) > 0) {
+  selection <- rbind(selection, # this already exists for SNVs
+                     strelka_indels[keep,
+                                    .(VARIANT_CLASS,Existing_variation,chr,start,end,Swegen_count,
+                                      SYMBOL,Protein_position,Amino_acids,rank_score=0,rank_terms='',LOH='',
+                                      Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+                                      MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
+                                      ref,alt,DP=DPt,DPn)]
+  )
+  if (nrow(selection)>0) {  
     for (i in 1:nrow(selection)) selection$Protein_position[i] <- strsplit(selection$Protein_position[i],'/')[[1]][1]
     selection$Protein_position[is.na(selection$Protein_position)]=''
     
-    # if cancer genes within 100k of variant with no symbol (regulatory), assign (one, by tier) as symbol
+    # if cancer genes within 100k of variant with no symbol (e.g. regulatory), assign (one, by tier) as symbol
     for (i in which(selection$SYMBOL=='')) {
       near=allgenes[chr==selection$chr[i] &
                       start<selection$end[i]+1e5 &
                       end>selection$start[i]-1e5]
       if (nrow(near)>0) {
         near_cancer=tumorgenes[`Gene Symbol` %in% near$name]
-        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier),`Gene Symbol`][1]
+        if (nrow(near_cancer)>0) selection$SYMBOL[i]=near_cancer[order(Tier,na.last = T),`Gene Symbol`][1]
       }
     }  
     
-    # Genes in census or local list considered T2, census Tier1 then gets T1
-    selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$Gene | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
-    selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
+    # Add gene scores
+    ix=selection$SYMBOL %in% tumorgenes$`Gene Symbol`[which(tumorgenes$Tier==1)]
+    selection$rank_score[ix]=3
+    selection$rank_terms[ix]='cosmic_T1'
+    ix=selection$SYMBOL %in% tumorgenes$`Gene Symbol`[which(tumorgenes$Tier==2)]
+    selection$rank_score[ix]=2
+    selection$rank_terms[ix]='cosmic_T2'
+    ix=selection$SYMBOL %in% tumorgenes$`Gene Symbol`[which(is.na(tumorgenes$Tier) & tumorgenes$`Gene Symbol`!='')]
+    selection$rank_score[ix]=2
+    selection$rank_terms[ix]='published_gene'
     
-    # Mutation effect: T2 (what?). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
-    selection$Effect_Tier[selection$IMPACT %in% c('HIGH','MODERATE')] <- 2
+    # Add high impact
+    ix=selection$IMPACT=='HIGH'
+    if (any(ix)) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'high_impact')
+    }
+    
+    # Add clinvar pathogenic
+    ix=grep('pathogenic',selection$CLIN_SIG)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'pathogenic')
+    }
+    
+    # Add hotspots
     temp=paste(selection$SYMBOL,selection$Protein_position)
-    is_hotspot_pos <- 
+    ix <-
       temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
       temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
-    selection[is_hotspot_pos | (IMPACT=='HIGH' &
-                                  selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
-    selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
-    selection <- selection[order(Effect_Tier,Gene_Tier)]
+    if (any(ix)) {
+      selection$rank_score[ix]=selection$rank_score[ix]+3
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'hotspot')
+    }
     
+    # Add trancription factors
+    ix=grep('TF',selection$Consequence)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+1
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TFBS')
+    }
+    
+    # Add regulatory
+    ix=grep('regulatory',selection$Consequence)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+1
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'regulatory')
+    }
   }
   
-  
-  # Add ASCAT LOH.
+  # Add Control Freec LOH.
   if (nrow(selection)>0) for (i in 1:nrow(selection)) {
-    ix=ascat_cnv$chr==selection$chr[i] &
-      ascat_cnv$startpos<selection$start[i] &
-      ascat_cnv$endpos>selection$end[i]
+    ix=freec_loh$chr==selection$chr[i] &
+      freec_loh$start<selection$start[i] &
+      freec_loh$end>selection$end[i]
     ix=ix[!is.na(ix)]
-    if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
+    if (sum(ix) >0) selection$LOH[i]='Y'
   }
   
-  strelka_selected <- rbind(strelka_selected,selection)[order(Effect_Tier,Gene_Tier)]
+  strelka_selected <- selection[order(rank_score,decreasing = T)]
   
   htmlTable(strelka_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
   #kable_styling(bootstrap_options = "striped",position = "left") %>%
@@ -1889,7 +1950,7 @@ if (exists('mutect2_table')) {
 
 #### Coverage - allele frequency
 <!-- Make a scatter plot of Mutect2 findings, showing which are also in Strelka -->
-```{r, echo=FALSE,,fig.width=6,fig.height=4,warning=F}
+```{r, echo=FALSE,,fig.width=15,fig.height=10,warning=F}
 if (exists('strelka_indels') &
     exists('strelka_snvs') &
     exists('mutect2_table')) {
@@ -2041,7 +2102,7 @@ if (length(haplotypecaller_N_file)>0) {
   
   
   # Keep high/mod-relevance in final output
-  impact=which(haplotypecaller_table$IMPACT %in% c('HIGH','MODERATE'))
+  impact=which(haplotypecaller_table$IMPACT %in% c('HIGH','MODERATE','MODIFIER'))
   # Also keep Clinvar-pathogenic
   clinvar_pathogenic=grep('pathogenic',haplotypecaller_table$CLIN_SIG)
   # And PolyPhen-damaging
@@ -2123,23 +2184,6 @@ if (length(haplotypecaller_N_file)>0) {
       selection$rank_score[ix]=selection$rank_score[ix]+1
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'regulatory')
     }
-    
-    # old rank sys
-    # # Genes in census or local list considered T2, census Tier1 then gets T1
-    # selection$Gene_Tier[selection$SYMBOL %in% local_tumorgenes$Gene | selection$SYMBOL %in%  tumorgenes$`Gene Symbol`] <- 2
-    # selection$Gene_Tier[selection$SYMBOL %in%  tumorgenes[Tier==1,`Gene Symbol`]] <- 1
-    # 
-    # # Mutation effect: T2 (what?). T1 for MSK hotspot, or HIGH-impact in TSG, or Clinvar pathogenic
-    # selection$Effect_Tier[selection$IMPACT %in% c('HIGH','MODERATE')] <- 2
-    # temp=paste(selection$SYMBOL,selection$Protein_position)
-    # is_hotspot_pos <- 
-    #   temp %in% paste(hotspots_snv[,Hugo_Symbol],hotspots_snv[,Amino_Acid_Position]) |
-    #   temp %in% paste(hotspots_inframe[,Hugo_Symbol],hotspots_inframe[,Amino_Acid_Position])
-    # selection[is_hotspot_pos | (IMPACT=='HIGH' &
-    #                               selection$SYMBOL %in% tumorgenes[grep('TSG',`Role in Cancer`),`Gene Symbol`])]$Effect_Tier <- 1
-    # selection[grep('pathogenic',CLIN_SIG)]$Effect_Tier=1
-    # selection <- selection[order(Effect_Tier,Gene_Tier)]
-    # 
   }
   
   # Add ASCAT LOH.
@@ -2168,89 +2212,89 @@ if (length(haplotypecaller_N_file)>0) {
 ### Combined table {.active}
 ```{r}
 ## Combine all T1/2 data into a pretty table
-combined=NULL
-
-# T1 copy number only
-t=cnvs[Effect_Tier==2]
-if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
-                                                  Somatic=t$type,
-                                                  Gene=t$cosmic_genes,
-                                                  Mutation=t$effect,
-                                                  LOH='',
-                                                  Source='cFreec',
-                                                  Gene_Tier=t$Gene_Tier,
-                                                  Effect_Tier=t$Effect_Tier))
-t=ascat_cnv[Effect_Tier==2]
-if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
-                                                  Somatic='somatic',
-                                                  Gene=t$cosmic_genes,
-                                                  Mutation=ifelse(t$nMajor==0,'loss','gain'),
-                                                  LOH='',
-                                                  Source='Ascat',
-                                                  Gene_Tier=t$Gene_Tier,
-                                                  Effect_Tier=t$Effect_Tier))
-# Structural variants
-if (exists('manta_tumor_selected')) if (nrow(manta_tumor_selected)>0) {
-  t=unique(manta_tumor_selected[Effect_Tier==1 | Annotation=='gene_fusion',
-                                .(Annotation,Gene_Name,LOH,Gene_Tier,Effect_Tier)])[nchar(Gene_Name)<30]
-  if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
-                                                    Somatic='somatic',
-                                                    Gene=t$Gene_Name,
-                                                    Mutation=t$Annotation,
-                                                    LOH=t$LOH,
-                                                    Source='Manta',
-                                                    Gene_Tier=t$Gene_Tier,
-                                                    Effect_Tier=t$Effect_Tier))
-}
-t=unique(manta_normal_selected[Effect_Tier==1 | Annotation=='gene_fusion',
-                               .(SVTYPE,Gene_Name,LOH,Gene_Tier,Effect_Tier)])[nchar(Gene_Name)<30]
-if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
-                                                  Somatic='germline',
-                                                  Gene=t$Gene_Name,
-                                                  Mutation=t$SVTYPE,
-                                                  LOH=t$LOH,
-                                                  Source='Manta',
-                                                  Gene_Tier=t$Gene_Tier,
-                                                  Effect_Tier=t$Effect_Tier))
-# SNVs/indels
-if (exists('mutect2_selected')) if (nrow(mutect2_selected)>0) {
-  t=unique(mutect2_selected[Effect_Tier<=2 & Gene_Tier<=2,
-                            .(Protein_position,Amino_acids,SYMBOL,LOH,Gene_Tier,Effect_Tier)])
-  if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
-                                                    Somatic='somatic',
-                                                    Gene=t$SYMBOL,
-                                                    Mutation=paste(t$Protein_position,t$Amino_acids),
-                                                    LOH=t$LOH,
-                                                    Source='Mutect2',
-                                                    Gene_Tier=t$Gene_Tier,
-                                                    Effect_Tier=t$Effect_Tier))
-}
-if (exists('strelka_selected')) if (nrow(strelka_selected)>0) {
-  t=unique(strelka_selected[Effect_Tier<=2 & Gene_Tier<=2,
-                            .(Protein_position,Amino_acids,SYMBOL,LOH,Gene_Tier,Effect_Tier)])
-  if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
-                                                    Somatic='somatic',
-                                                    Gene=t$SYMBOL,
-                                                    Mutation=paste(t$Protein_position,t$Amino_acids),
-                                                    LOH=t$LOH,
-                                                    Source='Strelka',
-                                                    Gene_Tier=t$Gene_Tier,
-                                                    Effect_Tier=t$Effect_Tier))
-}
-if (exists('haplotypecaller_selected')) if (nrow(haplotypecaller_selected)>0) {
-  t=unique(haplotypecaller_selected[Effect_Tier<=2 & Gene_Tier<=2,
-                                    .(Protein_position,Amino_acids,SYMBOL,LOH,Gene_Tier,Effect_Tier)])
-  if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
-                                                    Somatic='germline',
-                                                    Gene=t$SYMBOL,
-                                                    Mutation=paste(t$Protein_position,t$Amino_acids),
-                                                    LOH=t$LOH,
-                                                    Source='HaplotypeCaller',
-                                                    Gene_Tier=t$Gene_Tier,
-                                                    Effect_Tier=t$Effect_Tier))
-}
-
-htmlTable(combined, col.rgroup = c("none", "#F7F7F7"))
+# combined=NULL
+# 
+# # T1 copy number only
+# t=cnvs[Effect_Tier==2]
+# if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
+#                                                   Somatic=t$type,
+#                                                   Gene=t$cosmic_genes,
+#                                                   Mutation=t$effect,
+#                                                   LOH='',
+#                                                   Source='cFreec',
+#                                                   Gene_Tier=t$Gene_Tier,
+#                                                   Effect_Tier=t$Effect_Tier))
+# t=ascat_cnv[Effect_Tier==2]
+# if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
+#                                                   Somatic='somatic',
+#                                                   Gene=t$cosmic_genes,
+#                                                   Mutation=ifelse(t$nMajor==0,'loss','gain'),
+#                                                   LOH='',
+#                                                   Source='Ascat',
+#                                                   Gene_Tier=t$Gene_Tier,
+#                                                   Effect_Tier=t$Effect_Tier))
+# # Structural variants
+# if (exists('manta_tumor_selected')) if (nrow(manta_tumor_selected)>0) {
+#   t=unique(manta_tumor_selected[Effect_Tier==1 | Annotation=='gene_fusion',
+#                                 .(Annotation,Gene_Name,LOH,Gene_Tier,Effect_Tier)])[nchar(Gene_Name)<30]
+#   if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
+#                                                     Somatic='somatic',
+#                                                     Gene=t$Gene_Name,
+#                                                     Mutation=t$Annotation,
+#                                                     LOH=t$LOH,
+#                                                     Source='Manta',
+#                                                     Gene_Tier=t$Gene_Tier,
+#                                                     Effect_Tier=t$Effect_Tier))
+# }
+# t=unique(manta_normal_selected[Effect_Tier==1 | Annotation=='gene_fusion',
+#                                .(SVTYPE,Gene_Name,LOH,Gene_Tier,Effect_Tier)])[nchar(Gene_Name)<30]
+# if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
+#                                                   Somatic='germline',
+#                                                   Gene=t$Gene_Name,
+#                                                   Mutation=t$SVTYPE,
+#                                                   LOH=t$LOH,
+#                                                   Source='Manta',
+#                                                   Gene_Tier=t$Gene_Tier,
+#                                                   Effect_Tier=t$Effect_Tier))
+# # SNVs/indels
+# if (exists('mutect2_selected')) if (nrow(mutect2_selected)>0) {
+#   t=unique(mutect2_selected[Effect_Tier<=2 & Gene_Tier<=2,
+#                             .(Protein_position,Amino_acids,SYMBOL,LOH,Gene_Tier,Effect_Tier)])
+#   if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
+#                                                     Somatic='somatic',
+#                                                     Gene=t$SYMBOL,
+#                                                     Mutation=paste(t$Protein_position,t$Amino_acids),
+#                                                     LOH=t$LOH,
+#                                                     Source='Mutect2',
+#                                                     Gene_Tier=t$Gene_Tier,
+#                                                     Effect_Tier=t$Effect_Tier))
+# }
+# if (exists('strelka_selected')) if (nrow(strelka_selected)>0) {
+#   t=unique(strelka_selected[Effect_Tier<=2 & Gene_Tier<=2,
+#                             .(Protein_position,Amino_acids,SYMBOL,LOH,Gene_Tier,Effect_Tier)])
+#   if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
+#                                                     Somatic='somatic',
+#                                                     Gene=t$SYMBOL,
+#                                                     Mutation=paste(t$Protein_position,t$Amino_acids),
+#                                                     LOH=t$LOH,
+#                                                     Source='Strelka',
+#                                                     Gene_Tier=t$Gene_Tier,
+#                                                     Effect_Tier=t$Effect_Tier))
+# }
+# if (exists('haplotypecaller_selected')) if (nrow(haplotypecaller_selected)>0) {
+#   t=unique(haplotypecaller_selected[Effect_Tier<=2 & Gene_Tier<=2,
+#                                     .(Protein_position,Amino_acids,SYMBOL,LOH,Gene_Tier,Effect_Tier)])
+#   if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
+#                                                     Somatic='germline',
+#                                                     Gene=t$SYMBOL,
+#                                                     Mutation=paste(t$Protein_position,t$Amino_acids),
+#                                                     LOH=t$LOH,
+#                                                     Source='HaplotypeCaller',
+#                                                     Gene_Tier=t$Gene_Tier,
+#                                                     Effect_Tier=t$Effect_Tier))
+# }
+# 
+# htmlTable(combined, col.rgroup = c("none", "#F7F7F7"))
 
 
 
@@ -2289,8 +2333,8 @@ sampleList <- list(
     manta_tumor_selected=manta_tumor_selected,#manta_tumor_table,
     mutect2_selected=mutect2_selected,#mutect2_table,
     strelka_selected=strelka_selected,#strelka_indels,strelka_snvs,
-    haplotypecaller_selected=haplotypecaller_selected,#haplotypecaller_table # >2GB with the bid tables added
-    combined_findings=combined
+    haplotypecaller_selected=haplotypecaller_selected#,#haplotypecaller_table # >2GB with the bid tables added
+    #combined_findings=combined
   )
 )
 names(sampleList)=sampleData$name
