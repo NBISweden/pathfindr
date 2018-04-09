@@ -80,7 +80,37 @@ familial_genes <- c("ALK", "APC", "ATM", "BAP1", "BLM", "BMPR1A", "BRCA1", "BRCA
 ## Germline deletion: remove if known CNV
 
 
+### Check out Cosmic nocoding
+noncoding=fread('~/Data/BTBdata/resources/COSMIC/CosmicNCV.tsv')
+noncoding=noncoding[,.(`genome position`)]
+noncoding_table=as.data.table(table(noncoding$`genome position`))
+colnames(noncoding_table)=c('name','value')
+noncoding_table=noncoding_table[value>1][order(value,decreasing = T)]
+fwrite(noncoding_table,'~/reports/cosmic_noncoding.csv')
 
+### Check out Cosmic Coding
+coding=fread('~/Data/BTBdata/resources/COSMIC/CosmicGenomeScreensMutantExport.tsv')
+coding=coding[,.(`Mutation genome position`)]
+coding_table=as.data.table(table(coding$`Mutation genome position`))
+colnames(coding_table)=c('name','value')
+coding_table=coding_table[value>1][order(value,decreasing = T)][name!='']
+fwrite(coding_table,'~/reports/cosmic_coding.csv')
+
+## Fusions
+fusions=unique(fread('~/Data/BTBdata/resources/COSMIC/CosmicFusionExport.tsv')[,.(`Translocation Name`,`Sample name`)][`Translocation Name`!='',1])
+fusions$genes=''
+for (i in 1:nrow(fusions)) {
+  g=NULL
+  t=strsplit(fusions$`Translocation Name`[i],'\\{')[[1]]
+  g[1]=t[1]
+  t=strsplit(t[2],'_')[[1]]
+  g[2]=rev(t)[1]
+  fusions$genes[i]=paste(sort(g),collapse = ' ')
+}
+fusion_table=as.data.table(table(fusions$`genes`))
+colnames(fusion_table)=c('name','value')
+fusion_table=fusion_table[value>1][order(value,decreasing = T)]
+fwrite(fusion_table,'~/reports/cosmic_fusions.csv')
 
 
 

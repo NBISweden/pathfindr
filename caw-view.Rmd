@@ -66,23 +66,18 @@ ascat_Tbaf_file <- files[grep(pattern = "^.*Ascat.*[TR]\\.BAF$",files)]
 ascat_Nbaf_file <- files[grep(pattern = "^.*Ascat.*[BN]\\.BAF$",files)]
 ascat_segment_file <- files[grep(pattern = "^.*Ascat.*[TR]\\.cnvs\\.txt$",files)]
 # Manta structural variant files
-vep_Tstruct_file <- grep(pattern = "^.*SnpEff/Manta.*vs.*somaticSV\\..*ann.*\\.vcf$",files,value = T)[1]
-vep_Nstruct_file <- grep(pattern = "^.*SnpEff/Manta.*vs.*diploidSV\\..*ann.*\\.vcf$",files,value = T)[1]
+vep_Tstruct_file <- grep(pattern = "^.*Annotation/VEP/Manta.*vs.*somaticSV.vcf\\..*ann.*vcf$",files,value = T)[1]
+vep_Nstruct_file <- grep(pattern = "^.*Annotation/VEP/Manta.*vs.*diploidSV.vcf\\..*ann.*vcf$",files,value = T)[1]
 # Haplotype caller variant files
-haplotypecaller_T_file <- grep(pattern = "^.*VEP/haplotypecaller.*[TR]\\.vcf\\.vep\\.ann\\.vcf$",files,value = T) # local
-haplotypecaller_N_file <- grep(pattern = "^.*VEP/haplotypecaller.*[BN]\\.vcf\\.vep\\.ann\\.vcf$",files,value = T) # local
+haplotypecaller_T_file <- grep(pattern = "^.*Annotation/VEP/haplotypecaller.*[TR]\\.vcf.*vcf$",files,value = T)[1] # local
+haplotypecaller_N_file <- grep(pattern = "^.*Annotation/VEP/haplotypecaller.*[BN]\\.vcf.*vcf$",files,value = T)[1] # local
 # snpEff+VEP Mutect2 file
-mutect2_file <- grep(pattern = glob2rx("*/Annotation/mutect2_*canon.vep.ann.pick.PASS.recode.vcf"),files,value = T) # <- local
-if (length(mutect2_file)==0)
-  mutect2_file <- grep(pattern = glob2rx("*Annotation/VEP/mutect2_*.vcf.vep.ann*.vcf"),files,value = T)[1] # <- bianca
+mutect2_file <- grep(pattern = "^.*Annotation/VEP/mutect2_.*[TR]_vs_.*[BN]\\.vcf.*vcf$",files,value = T)[1]
 # snpEff + VEP Strelka snv file
-strelka_snv_file <- grep(pattern = glob2rx("*/Annotation/Strelka_*somatic_snvs.snpeff.ann.canon.vep.ann.pick.PASS.recode.vcf"),files,value = T) # <- local
-if (length(strelka_snv_file)==0)
-  strelka_snv_file <- grep(pattern = glob2rx("*Annotation/VEP/Strelka_*_somatic_snvs.vcf.vep.ann*.vcf"),files,value = T)[1] # <- bianca
+strelka_snv_file <- grep(pattern = "^.*Annotation/VEP/Strelka_.*_somatic_snvs.*vcf$",files,value = T)[1]
 # snpEff + VEP Strelka indel file
-strelka_indel_file <- grep(pattern = glob2rx("*/Annotation/Strelka_*somatic_indels.snpeff.ann.canon.vep.ann.pick.PASS.recode.vcf"),files,value = T) # <- local
-if (length(strelka_indel_file)==0)
-  strelka_indel_file <- grep(pattern = glob2rx("*Annotation/VEP/Strelka_*_somatic_indels.vcf.vep.ann*.vcf"),files,value = T)[1] # <- bianca
+strelka_indel_file <- grep(pattern = "^.*Annotation/VEP/Strelka_.*_somatic_indels.*vcf$",files,value = T)[1]
+
 
 rm(files)
 {
@@ -148,18 +143,19 @@ chrsz <- data.table(
 
 <!-- Reference data files -->
 ```{r load_reference}
-snptable=fread('~/reports/swegen_snp_counts.csv') #  swegen_hg38_allele_counts
-setkey(snptable,name)
-swegen_hg38_manta_all=fread('~/reports/swegen_sv_counts.csv')
-setkey(swegen_hg38_manta_all,name)
-#chrsz=fread('~/reports/chr_data.csv')
-allgenes=fread('~/reports/genes_ensemble_canonical.csv')
+snptable=fread('~/reports/swegen_snp_counts.csv',key='name')
+swegen_hg38_manta_all=fread('~/reports/swegen_sv_counts.csv',key='name')
+allgenes=fread('~/reports/genes_ensemble_canonical.csv',key='name')
 tumorgenes=fread('~/reports/cancer_gene_census.csv')
 local_tumorgenes=fread('~/reports/Gene_list_2018.csv')[Gene!='']
 local_tumorgenes$`Gene Symbol`=local_tumorgenes$Gene
 tumorgenes=merge(tumorgenes,local_tumorgenes,all=T)
+setkey(tumorgenes,`Gene Symbol`)
 hotspots_inframe=fread('~/reports/hotspots_v2_inframe.csv')
 hotspots_snv=fread('~/reports/hotspots_v2_snv.csv')
+#cosmic_coding=fread('~/reports/cosmic_coding.csv',key = 'name')
+#cosmic_noncoding=fread('~/reports/cosmic_noncoding.csv',key = 'name')
+#cosmic_fusions=fread('~/reports/cosmic_fusions.csv',key = 'name')
 ```
 
 
@@ -738,19 +734,9 @@ if (length(vep_Tstruct_file)>0) {
     tstruc$N=as.character(1:nrow(tstruc))
     manta_tumor_table <- merge(tstruc,snpEff_table,by='N')[order(cumstart),-1][nchar(Gene_Name)<40]
     
-    # Deletion: remove deletions >3MB for "xxx_ablation" consequences
-    del_rm <- intersect(which(abs(manta_tumor_table[,altpos-start])>3e6),
-                        grep('ablation',manta_tumor_table$Annotation))
-    # Amplification: remove >5M for 'duplication' consequences,
-    amp_rm <- intersect(which(abs(manta_tumor_table[,altpos-start])>5e6),
-                        grep('duplication',manta_tumor_table$Annotation))
-    
-    keep=rep(T,nrow(manta_tumor_table)) 
-    keep[union(del_rm,amp_rm)]=F
-    
     ## Make new table with predicted effects
     selection <- unique(
-      manta_tumor_table[, # <---- not using "keep"
+      manta_tumor_table[,
                         .(SVTYPE,ID=THISID,chr,start,end,Swegen_count,
                           altchr,altpos,SVLEN=unlist(SVLEN),
                           Gene_Name,rank_score=0,rank_terms='',LOH='',Comment='',
@@ -1026,7 +1012,7 @@ if (length(vep_Tstruct_file)>0) {
   
 
 manta_tumor_selected <- selection[order(rank_score,decreasing = T)]
-htmlTable(manta_tumor_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
+htmlTable(manta_tumor_selected[rank_score>2], col.rgroup = c("none", "#F7F7F7")) #%>%
 #kable_styling(bootstrap_options = "striped",position = "left") %>%
 #column_spec(7, width = "20em") %>%
 #column_spec(9, width = "20em") %>%
@@ -1134,7 +1120,7 @@ if (length(vep_Nstruct_file)>0) {
   
   ## Make new table with predicted effects
   selection <- unique(
-    manta_normal_table[, # <---- not using "keep"
+    manta_normal_table[,
                        .(SVTYPE,ID=THISID,chr,start,end,Swegen_count,
                          altchr,altpos,SVLEN=unlist(SVLEN),
                          Gene_Name,rank_score=0,rank_terms='',LOH='',Comment='',
@@ -1342,7 +1328,7 @@ if (length(vep_Nstruct_file)>0) {
   # }
   
   manta_normal_selected <- selection[order(rank_score,decreasing = T)]
-  htmlTable(manta_normal_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
+  htmlTable(manta_normal_selected[rank_score>2], col.rgroup = c("none", "#F7F7F7")) #%>%
   #kable_styling(bootstrap_options = "striped",position = "left") %>%
   #column_spec(7, width = "20em") %>%
   #column_spec(9, width = "20em") %>%
@@ -1407,7 +1393,7 @@ if (exists('tstruc')) {
   }
   
   # add the NORMAL structural variants
-  temp=unique(manta_normal_table[THISID %in% manta_normal_selected[Gene_Tier<3,ID],.(cumstart,altcumpos,SVTYPE,IMPRECISE)])
+  temp=unique(manta_normal_table[THISID %in% manta_normal_selected[rank_score>3,ID],.(cumstart,altcumpos,SVTYPE,IMPRECISE)])
   if (nrow(temp)>0) g=g+geom_curve(aes(x = cumstart,xend = altcumpos,y=-1.499,yend=-1.5,col=SVTYPE,linetype=IMPRECISE),
                                    data = temp,alpha=1/2,
                                    stat = "identity",curvature=-0.2,size=0.5,
@@ -1536,7 +1522,7 @@ if (length(mutect2_file)>0) {
   mutect2_table=cbind(tmuts,annotation_table)
   
   # Keep high/mod-relevance in final output
-  impact=which(mutect2_table$IMPACT %in% c('HIGH','MODERATE','MODIFIER'))
+  impact=which(mutect2_table$IMPACT %in% c('HIGH','MODERATE'))
   # Also keep Clinvar-pathogenic
   clinvar_pathogenic=grep('pathogenic',mutect2_table$CLIN_SIG)
   # And PolyPhen-damaging
@@ -1727,7 +1713,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   strelka_snvs=strelka_snvs[Swegen_count<5]
   
   # Keep high/mod-relevance in final output
-  impact=which(strelka_snvs$IMPACT %in% c('HIGH','MODERATE','MODIFIER'))
+  impact=which(strelka_snvs$IMPACT %in% c('HIGH','MODERATE'))
   # Also keep Clinvar-pathogenic
   clinvar_pathogenic=grep('pathogenic',strelka_snvs$CLIN_SIG)
   # And PolyPhen-damaging
@@ -1738,12 +1724,13 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   regulatory=c(grep('TF',strelka_snvs$Consequence),grep('regulatory',strelka_snvs$Consequence)) # <-  used below?
   
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,regulatory)))
-  selection <- strelka_snvs[
-    keep,
-    .(VARIANT_CLASS,Existing_variation,chr,start,end,Swegen_count,SYMBOL,Protein_position,Amino_acids,Gene_Tier=3,Effect_Tier=3,LOH='',Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
-      MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
-      ref,alt,DP=DPt,DPn)
-    ]
+  
+  selection <- strelka_snvs[keep,
+                            .(VARIANT_CLASS,Existing_variation,chr,start,end,Swegen_count,
+                              SYMBOL,Protein_position,Amino_acids,rank_score=0,rank_terms='',LOH='',
+                              Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
+                              MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
+                              ref,alt,DP=DPt,DPn)]
   
   # indels are read and added below.
   
@@ -1827,7 +1814,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   strelka_indels=strelka_indels[Swegen_count<5]
   
   # Keep high/mod-relevance in final output
-  impact=which(strelka_indels$IMPACT %in% c('HIGH','MODERATE','MODIFIER'))
+  impact=which(strelka_indels$IMPACT %in% c('HIGH','MODERATE'))
   # Also keep Clinvar-pathogenic
   clinvar_pathogenic=grep('pathogenic',strelka_indels$CLIN_SIG)
   # And PolyPhen-damaging
@@ -1927,6 +1914,15 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   #kable_styling(bootstrap_options = "striped",position = "left") %>%
   #scroll_box(width = "1000px", height = "600px")
   
+  # compare content in callers
+  mutect2_temp=apply(X = mutect2_table[,c('chr','start','end','ref','alt'),],
+                     MARGIN = 1,FUN = paste,collapse=' ')
+  strelka_temp=apply(X = rbind(strelka_snvs[,c('chr','start','end','ref','alt'),],
+                               strelka_indels[,c('chr','start','end','ref','alt'),]),
+                     MARGIN = 1,FUN = paste,collapse=' ')
+  mutect2_table$Callers <- 'Mutect 2'
+  mutect2_table$Callers[mutect2_temp %in% strelka_temp]='Mutect 2 and Strelka'
+  
 }
 ```
 
@@ -1939,15 +1935,6 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
 cat(mutect2_file,strelka_indel_file,strelka_snv_file,sep = '\n')
 if (exists('mutect2_table')) {
   par(mai=c(1,4,0,2))
-  
-  # compare content in callers
-  mutect2_temp=apply(X = mutect2_table[,c('chr','start','end','ref','alt'),],
-                     MARGIN = 1,FUN = paste,collapse=' ')
-  strelka_temp=apply(X = rbind(strelka_snvs[,c('chr','start','end','ref','alt'),],
-                               strelka_indels[,c('chr','start','end','ref','alt'),]),
-                     MARGIN = 1,FUN = paste,collapse=' ')
-  mutect2_table$Callers <- 'Mutect 2'
-  mutect2_table$Callers[mutect2_temp %in% strelka_temp]='Mutect 2 and Strelka'
   
   g=ggplot(data = mutect2_table[mutect2_table$filter=='PASS' & mutect2_table$Callers=='Mutect 2 and Strelka',],
            aes(x=cumstart,y=TUMOR,fill=type,shape=type,col=reads))+
@@ -2138,8 +2125,27 @@ if (length(haplotypecaller_N_file)>0) {
   haplotypecaller_table=cbind(nmuts,annotation_table)
   
   
+  # double check Swegen in case ID was not matched (rsid in reference but not in data)
+  temp=haplotypecaller_table[Swegen_count==0]
+  ids=strsplit(paste(temp$Existing_variation,collapse='&'),'&')[[1]]
+  ids=grep('^rs',ids,value = T)
+  snps=snptable[ids][!is.na(value)]
+  if (nrow(snps)>0)
+    for (i in 1:nrow(snps)) 
+      haplotypecaller_table$Swegen_count[grep(snps$name[i],haplotypecaller_table$Existing_variation)]=snps$value[i]
+  # double check Swegen in case ID was not matched (pos in reference but not properly matched in data)
+  pos=paste0('chr',haplotypecaller_table$chr,':',haplotypecaller_table$start,'_',haplotypecaller_table$ref,'/',haplotypecaller_table$alt)
+  snps=snptable[c(pos)][!is.na(value)]
+  if (nrow(snps)>0) haplotypecaller_table$Swegen_count[match(snps$name,pos)]=snps$value
+  pos=paste0('chr',haplotypecaller_table$chr,':',haplotypecaller_table$start,'_',haplotypecaller_table$ref,'/',haplotypecaller_table$alt2)
+  snps=snptable[c(pos)][!is.na(value)]
+  if (nrow(snps)>0) haplotypecaller_table$Swegen_count[match(snps$name,pos)]=snps$value
+  
+  # Re-filter on counts
+  haplotypecaller_table=haplotypecaller_table[Swegen_count<5]
+  
   # Keep high/mod-relevance in final output
-  impact=which(haplotypecaller_table$IMPACT %in% c('HIGH','MODERATE','MODIFIER'))
+  impact=which(haplotypecaller_table$IMPACT %in% c('HIGH','MODERATE'))
   # Also keep Clinvar-pathogenic
   clinvar_pathogenic=grep('pathogenic',haplotypecaller_table$CLIN_SIG)
   # And PolyPhen-damaging
@@ -2248,9 +2254,8 @@ if (length(haplotypecaller_N_file)>0) {
 
 ### Combined table {.active}
 ```{r combined_findings}
-## Combine all T1/2 data into a pretty table
-# combined=NULL
-# 
+## Combine all T1/2 data into smaller tables
+
 # # T1 copy number only
 # t=cnvs[Effect_Tier==2]
 # if (nrow(t)>0) combined=rbind(combined,data.table(Patient=sampleData$name,
@@ -2397,7 +2402,7 @@ save(sampleList,file=paste0('~/reports/',sampleData$name,'_data.Rata'))
 ## Chromosomes {.tabset}
 <!-- Plot composite data, chromosome wise -->
 ```{r chromosomes_plot_function}
-chromplot=function(thischr) {
+chromplot2=function(thischr) {
   # basic plot element:
   g0=ggplot()+
     scale_x_continuous(
@@ -2417,7 +2422,7 @@ chromplot=function(thischr) {
     )
   
   #copy number element
-  g=g0+expand_limits(y=c(0,3))
+  g=g0+ylim(y=c(0,3))
   if (exists('tratio')) {
     temp <- nratio
     temp$Ratio[temp$Ratio>3]=3
@@ -2439,7 +2444,20 @@ chromplot=function(thischr) {
   g_cnv=g
   
   # structutal variants element
-  g=g0+expand_limits(y=c(-1,1))
+  g=g0+ylim(c(-1,1))
+  if (exists('tratio')) {
+    temp <- tratio
+    temp$Ratio[temp$Ratio>3]=3
+    g=g+geom_line(aes(x=Start,y=log2(Ratio)),
+                  data = temp[temp$Chromosome==thischr,],alpha=1/10,
+                  stat="identity",colour="black")
+  } else if (exists('ascat_tratio')) {
+    temp <- ascat_tratio
+    temp$smoothed[temp$smoothed>3]=3
+    g=g+geom_line(aes(x=Position,y=log2(smoothed)),
+                  data = temp[temp$Chr==thischr,],alpha=1/10,
+                  stat="identity",colour="black")
+  }
   if (exists('tstruc')) if (nrow(tstruc)>0) {
     # first same chrom SVs
     temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr==tstruc$chr,]
@@ -2456,7 +2474,7 @@ chromplot=function(thischr) {
   g_sv=g
   
   # somatic small variants element
-  g=g0+expand_limits(y=c(0,1))
+  g=g0+ylim(y=c(0,1))
   if (exists('mutect2_table')) if (nrow(mutect2_table)>0) {
     temp=mutect2_table[chr==thischr & filter=='PASS' & Callers=='Mutect 2 and Strelka',]
     if (nrow(temp)>0) { 
@@ -2481,7 +2499,7 @@ chromplot=function(thischr) {
   g_mut=g
   
   # tumor SNPs
-  g=g0+expand_limits(y=c(0,1))
+  g=g0+ylim(y=c(0,1))
   if (exists('tbaf')) { 
     g=g+geom_point(aes(x=Position,y=BAF),data = tbaf[tbaf$Chromosome==thischr,],alpha=1/8,shape='.')
   } else if (exists('ascat_tbaf'))  {
@@ -2494,12 +2512,20 @@ chromplot=function(thischr) {
                    data = temp,alpha=1)+
         geom_label_repel(data = temp[Amino_acids!='',],
                          mapping = aes(x=start,y=AF_t,label=paste(SYMBOL,Protein_position,Amino_acids)),
-                         inherit.aes = F,size=3,min.segment.length = 0)
+                         inherit.aes = F,size=3,min.segment.length = 0)+
+        scale_fill_manual(
+          values=c("A>C"="#1B9E77","A>G"="#D95F02", "A>T"="#7570B3", 
+                   "C>A"="#E7298A", "C>G"="#66A61E", "C>T"="#E6AB02", 
+                   "del"="#A6761D", "ins"="#666666"))+
+        scale_shape_manual(
+          values=c("A>C"=21,"A>G"=21, "A>T"=21, 
+                   "C>A"=21, "C>G"=21, "C>T"=21, 
+                   "del"=24, "ins"=25))
   }
   g_tsnp=g
   
-  # tumor SNPs
-  g=g0+expand_limits(y=c(0,1))
+  # normal SNPs
+  g=g0+ylim(y=c(0,1))
   if (exists('nbaf')) {
     g=g+geom_point(aes(x=Position,y=BAF),data = nbaf[nbaf$Chromosome==thischr,],alpha=1/8,shape='.')
   } else if (exists('ascat_nbaf')) {
@@ -2511,166 +2537,174 @@ chromplot=function(thischr) {
                  data = temp,alpha=1)+
       geom_label_repel(data = temp[Amino_acids!='',],
                        mapping = aes(x=start,y=AF,label=paste(SYMBOL,Protein_position,Amino_acids)),
-                       inherit.aes = F,size=3,min.segment.length = 0)
+                       inherit.aes = F,size=3,min.segment.length = 0)+
+        scale_fill_manual(
+          values=c("A>C"="#1B9E77","A>G"="#D95F02", "A>T"="#7570B3", 
+                   "C>A"="#E7298A", "C>G"="#66A61E", "C>T"="#E6AB02", 
+                   "del"="#A6761D", "ins"="#666666"))+
+        scale_shape_manual(
+          values=c("A>C"=21,"A>G"=21, "A>T"=21, 
+                   "C>A"=21, "C>G"=21, "C>T"=21, 
+                   "del"=24, "ins"=25))
   }
   g_nsnp=g
   
-  # grid.newpage()
-  # grid.draw(rbind(ggplotGrob(g_cnv), 
-  #                 ggplotGrob(g_sv),
-  #                 ggplotGrob(g_mut),
-  #                 ggplotGrob(g_tsnp),
-  #                 ggplotGrob(g_nsnp),
-  #                 size = "last"))
+  grid.newpage()
+  grid.draw(rbind(ggplotGrob(g_cnv),
+                  ggplotGrob(g_sv),
+                  ggplotGrob(g_mut),
+                  ggplotGrob(g_tsnp),
+                  ggplotGrob(g_nsnp),size = "last"))
   
 } # end of plot function
 ```
 
 ```{r old_plot_function}  
-  # chromplot_old=function(thischr) if (T) {
-  #   par(mai=c(0,4,0,2))
-  #   g=ggplot()+
-  #     scale_y_continuous(limits=c(-2.7,3),
-  #                        breaks = seq(1.5,-2.5,-0.5),
-  #                        minor_breaks = seq(1.25,-2.25,-0.5),
-  #                        labels = 
-  #                          c('Tumor DNA=1.5','Tumor Copy Ratio\n(median centered)','Tumor DNA=0.5\nMutation AF=1','Mutation AF=0.5','Mutation AF=0\nTumor SNP AF=1',
-  #                            'Tumor\nSNPs','Tumor SNP AF=0\nNormal SNP AF=1','Normal\nSNPs','Normal SNP AF=0'))+
-  #     scale_x_continuous(
-  #       breaks = 10e6*seq(0,ceiling(chrsz$length[chrsz$chr==thischr]/10e6)),
-  #       labels= c('0',paste0(10*seq(1,ceiling(chrsz$length[chrsz$chr==thischr]/10e6)),'M')),
-  #       minor_breaks = 1e6*seq(0,ceiling(chrsz$length[chrsz$chr==thischr]/1e6)))+
-  #     theme(panel.grid.minor.x = element_line(colour="lightgrey", size=0.05),
-  #           panel.grid.major.x = element_line(colour="grey", size=0.2),
-  #           panel.grid.major.y = element_line(colour="black", size=0.2),
-  #           panel.grid.minor.y = element_line(colour="lightgrey", size=0.05),
-  #           axis.title.x=element_blank(),
-  #           axis.ticks.x=element_blank(),
-  #           axis.title.y=element_blank(),
-  #           axis.ticks.y=element_blank())#+
-  #   
-  #   # lines to separate parts of fig
-  #   g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=0.5,yend=0.5),alpha=1)
-  #   g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-0.5,yend=-0.5),alpha=1)
-  #   g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-1.5,yend=-1.5),alpha=1)
-  #   g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-2.5,yend=-2.5),alpha=1)
-  #   
-  #   ### TUMOR (& normal) LOGRATIO  
-  #   if (exists('tratio')) {
-  #     temp <- nratio
-  #     temp$Ratio[temp$Ratio>3]=3
-  #     g=g+geom_line(aes(x=Start,y=Ratio),
-  #                   data = temp[temp$Chromosome==thischr,],alpha=1/3,
-  #                   stat="identity",colour="red")
-  #     temp <- tratio
-  #     temp$Ratio[temp$Ratio>3]=3
-  #     g=g+geom_line(aes(x=Start,y=Ratio),
-  #                   data = temp[temp$Chromosome==thischr,],alpha=2/3,
-  #                   stat="identity",colour="black")
-  #   } else if (exists('ascat_tratio')) {
-  #     temp <- ascat_tratio
-  #     temp$smoothed[temp$smoothed>3]=3
-  #     g=g+geom_line(aes(x=Position,y=smoothed),
-  #                   data = temp[temp$Chr==thischr,],alpha=1/3,
-  #                   stat="identity",colour="black")
-  #   }
-  #   
-  #   ### TUMOR STRVAR  
-  #   if (exists('tstruc')) if (nrow(tstruc)>0) {
-  #     # first same chrom SVs
-  #     temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr==tstruc$chr,]
-  #     if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=1.99,yend=2,col=SVTYPE,linetype=IMPRECISE),
-  #                                      data = temp,alpha=1/2,
-  #                                      curvature=-0.2,size=1,
-  #                                      position = "identity", angle = 90, ncp = 50,
-  #                                      arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
-  #                                      inherit.aes = FALSE)+
-  #         scale_color_manual(values=c("BND"="#E41A1C", "DEL"="#377EB8", "INV"="#4DAF4A", "INS"="#984EA3", "DUP"="#FF7F00"))+
-  #         scale_linetype_manual(values=c('TRUE'=2,'FALSE'=1))
-  #     # then diff chrom SVs
-  #     # temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr!=tstruc$chr,]
-  #     # if (nrow(temp)>0) { 
-  #     #   g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=rep(2,nrow(temp)),label=altchr),
-  #     #                        inherit.aes = F,size=3)
-  #     # }
-  #     # labels
-  #     # temp=allgenes[name %in% manta_tumor_selected$Gene_Name[manta_tumor_selected$Effect_Tier<3 & manta_tumor_selected$chr==thischr]]
-  #     # if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = start,y = 2,label=name),
-  #     #                                        data = temp,
-  #     #                                        size=3)
-  #   }
-  #   ### NORMAL SVs
-  #   # if (exists('nstruc')) if (nrow(nstruc)>0) {
-  #   #   # first same chrom SVs
-  #   #   temp=nstruc[nstruc$chr==thischr & nstruc$FILTER=='PASS' & nstruc$altchr==nstruc$chr,]
-  #   #   if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=0.149,yend=0.25,col=SVTYPE,linetype=IMPRECISE),
-  #   #                                    data = temp,alpha=1/2,
-  #   #                                    curvature=-0.2,size=1,
-  #   #                                    position = "identity", angle = 90, ncp = 50,
-  #   #                                    arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
-  #   #                                    inherit.aes = FALSE)
-  #   #   # then diff chrom SVs
-  #   #   temp=nstruc[nstruc$chr==thischr & nstruc$FILTER=='PASS' & nstruc$altchr!=nstruc$chr,]
-  #   #   if (nrow(temp)>0) { 
-  #   #     g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=0.25,label=altchr),
-  #   #                          inherit.aes = F,size=3)
-  #   #   }
-  #   #   # labels
-  #   #   temp=allgenes[name %in% manta_normal_selected$Gene_Name[manta_normal_selected$Effect_Tier<3 & manta_normal_selected$chr==thischr]]
-  #   #   if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = start,y = 0.25,label=name),
-  #   #                                          data = temp,
-  #   #                                          size=3)
-  #   # }
-  #   # 
-  #   ### TUMOR MUTATIONS  
-  #   if (exists('mutect2_table')) if (nrow(mutect2_table)>0) {
-  #     temp=mutect2_table[chr==thischr & filter=='PASS' & Callers=='Mutect 2 and Strelka',]
-  #     if (nrow(temp)>0) { 
-  #       g=g+geom_point(aes(x=start,y=TUMOR -0.5,fill=type,shape=type),data = temp,alpha=1)+
-  #         scale_fill_manual(values = c("A>C"="#1B9E77","A>G"="#D95F02", "A>T"="#7570B3", "C>A"="#E7298A", "C>G"="#66A61E", "C>T"="#E6AB02", "del"="#A6761D", "ins"="#666666"))+
-  #         scale_shape_manual(values=c("A>C"=21,"A>G"=21, "A>T"=21, "C>A"=21, "C>G"=21, "C>T"=21, "del"=24, "ins"=25))#+
-  #       #scale_color_manual(values=c('<5'='lightgrey','≥5'='black'))
-  #       
-  #       g=g+geom_label_repel(data = temp[temp$Amino_acids!='',],
-  #                            mapping = aes(x=start,y=TUMOR -0.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
-  #                            inherit.aes = F,size=3,min.segment.length = 0,nudge_y = 0.3)
-  #     }
-  #   }
-  #   
-  #   ### SNPS + germline mutation (at the corresponding track)
-  #   if (exists('tbaf')) { 
-  #     g=g+geom_point(aes(x=Position,y=BAF -1.5),data = tbaf[tbaf$Chromosome==thischr,],alpha=1/8,shape='.')
-  #   } else if (exists('ascat_tbaf'))  {
-  #     g=g+geom_point(aes(x=Position,y=BAF -1.5),data = ascat_tbaf[ascat_tbaf$Chr==thischr,],alpha=1/8,shape='.')
-  #   }
-  #   if (exists('nbaf')) {
-  #     g=g+geom_point(aes(x=Position,y=BAF -2.5),data = nbaf[nbaf$Chromosome==thischr,],alpha=1/8,shape='.')
-  #   } else if (exists('ascat_nbaf')) {
-  #     g=g+geom_point(aes(x=Position,y=NBAF -2.5),data = ascat_nbaf[ascat_nbaf$Chr==thischr,],alpha=1/8,shape='.')
-  #   }
-  #   ## Germline muts
-  #   if (exists('haplotypecaller_table')) { 
-  #     temp=haplotypecaller_table[keep_haplotypecaller][chr==thischr]
-  #     g=g+
-  #       geom_point(aes(x=start,y=AF_t -1.5,fill=type,shape=type),
-  #                  data = temp,alpha=1)+
-  #       geom_label_repel(data = temp[Amino_acids!='',],
-  #                        mapping = aes(x=start,y=AF_t -1.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
-  #                        inherit.aes = F,size=3,min.segment.length = 0)
-  #     g=g+
-  #       geom_point(aes(x=start,y=AF -2.5,fill=type,shape=type),
-  #                  data = temp,alpha=1)+
-  #       geom_label_repel(data = temp[Amino_acids!='',],
-  #                        mapping = aes(x=start,y=AF -2.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
-  #                        inherit.aes = F,size=3,min.segment.length = 0)
-  #   }
-  #   
-  #   #genes!
-  #   temp=allgenes[name %in% tumorgenes$`Gene Symbol` & chr==thischr]
-  #   g=g+geom_text_repel(mapping = aes(x = (start+end)/2,y =  -2.6,label=name),
-  #                       data=temp,
-  #                       nudge_y= -0.1,size=2)
-  #   return(g)
+  chromplot=function(thischr) if (T) {
+    par(mai=c(0,4,0,2))
+    g=ggplot()+
+      scale_y_continuous(limits=c(-2.7,3),
+                         breaks = seq(1.5,-2.5,-0.5),
+                         minor_breaks = seq(1.25,-2.25,-0.5),
+                         labels =
+                           c('Tumor DNA=1.5','Tumor Copy Ratio\n(median centered)','Tumor DNA=0.5\nMutation AF=1','Mutation AF=0.5','Mutation AF=0\nTumor SNP AF=1',
+                             'Tumor\nSNPs','Tumor SNP AF=0\nNormal SNP AF=1','Normal\nSNPs','Normal SNP AF=0'))+
+      scale_x_continuous(
+        breaks = 10e6*seq(0,ceiling(chrsz$length[chrsz$chr==thischr]/10e6)),
+        labels= c('0',paste0(10*seq(1,ceiling(chrsz$length[chrsz$chr==thischr]/10e6)),'M')),
+        minor_breaks = 1e6*seq(0,ceiling(chrsz$length[chrsz$chr==thischr]/1e6)))+
+      theme(panel.grid.minor.x = element_line(colour="lightgrey", size=0.05),
+            panel.grid.major.x = element_line(colour="grey", size=0.2),
+            panel.grid.major.y = element_line(colour="black", size=0.2),
+            panel.grid.minor.y = element_line(colour="lightgrey", size=0.05),
+            axis.title.x=element_blank(),
+            axis.ticks.x=element_blank(),
+            axis.title.y=element_blank(),
+            axis.ticks.y=element_blank())#+
+
+    # lines to separate parts of fig
+    g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=0.5,yend=0.5),alpha=1)
+    g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-0.5,yend=-0.5),alpha=1)
+    g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-1.5,yend=-1.5),alpha=1)
+    g=g+geom_segment(mapping = aes(x = 0,xend=chrsz$length[chrsz$chr==thischr],y=-2.5,yend=-2.5),alpha=1)
+
+    ### TUMOR (& normal) LOGRATIO
+    if (exists('tratio')) {
+      temp <- nratio
+      temp$Ratio[temp$Ratio>3]=3
+      g=g+geom_line(aes(x=Start,y=Ratio),
+                    data = temp[temp$Chromosome==thischr,],alpha=1/3,
+                    stat="identity",colour="red")
+      temp <- tratio
+      temp$Ratio[temp$Ratio>3]=3
+      g=g+geom_line(aes(x=Start,y=Ratio),
+                    data = temp[temp$Chromosome==thischr,],alpha=2/3,
+                    stat="identity",colour="black")
+    } else if (exists('ascat_tratio')) {
+      temp <- ascat_tratio
+      temp$smoothed[temp$smoothed>3]=3
+      g=g+geom_line(aes(x=Position,y=smoothed),
+                    data = temp[temp$Chr==thischr,],alpha=1/3,
+                    stat="identity",colour="black")
+    }
+
+    ### TUMOR STRVAR
+    if (exists('tstruc')) if (nrow(tstruc)>0) {
+      # first same chrom SVs
+      temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr==tstruc$chr,]
+      if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=1.99,yend=2,col=SVTYPE,linetype=IMPRECISE),
+                                       data = temp,alpha=1/2,
+                                       curvature=-0.2,size=1,
+                                       position = "identity", angle = 90, ncp = 50,
+                                       arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
+                                       inherit.aes = FALSE)+
+          scale_color_manual(values=c("BND"="#E41A1C", "DEL"="#377EB8", "INV"="#4DAF4A", "INS"="#984EA3", "DUP"="#FF7F00"))+
+          scale_linetype_manual(values=c('TRUE'=2,'FALSE'=1))
+      # then diff chrom SVs
+      # temp=tstruc[tstruc$chr==thischr & tstruc$FILTER=='PASS' & tstruc$altchr!=tstruc$chr,]
+      # if (nrow(temp)>0) {
+      #   g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=rep(2,nrow(temp)),label=altchr),
+      #                        inherit.aes = F,size=3)
+      # }
+      # labels
+      # temp=allgenes[name %in% manta_tumor_selected$Gene_Name[manta_tumor_selected$Effect_Tier<3 & manta_tumor_selected$chr==thischr]]
+      # if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = start,y = 2,label=name),
+      #                                        data = temp,
+      #                                        size=3)
+    }
+    ### NORMAL SVs
+    # if (exists('nstruc')) if (nrow(nstruc)>0) {
+    #   # first same chrom SVs
+    #   temp=nstruc[nstruc$chr==thischr & nstruc$FILTER=='PASS' & nstruc$altchr==nstruc$chr,]
+    #   if (nrow(temp)>0) g=g+geom_curve(aes(x = start,xend = altpos,y=0.149,yend=0.25,col=SVTYPE,linetype=IMPRECISE),
+    #                                    data = temp,alpha=1/2,
+    #                                    curvature=-0.2,size=1,
+    #                                    position = "identity", angle = 90, ncp = 50,
+    #                                    arrow = arrow(length=unit(0.10,"cm"), ends="both", type = "open"), lineend = "butt", na.rm = FALSE, show.legend = NA,
+    #                                    inherit.aes = FALSE)
+    #   # then diff chrom SVs
+    #   temp=nstruc[nstruc$chr==thischr & nstruc$FILTER=='PASS' & nstruc$altchr!=nstruc$chr,]
+    #   if (nrow(temp)>0) {
+    #     g=g+geom_label_repel(data = temp,mapping = aes(x=start,y=0.25,label=altchr),
+    #                          inherit.aes = F,size=3)
+    #   }
+    #   # labels
+    #   temp=allgenes[name %in% manta_normal_selected$Gene_Name[manta_normal_selected$Effect_Tier<3 & manta_normal_selected$chr==thischr]]
+    #   if (nrow(temp)>0) g=g+geom_label_repel(mapping = aes(x = start,y = 0.25,label=name),
+    #                                          data = temp,
+    #                                          size=3)
+    # }
+    #
+    ### TUMOR MUTATIONS
+    if (exists('mutect2_table')) if (nrow(mutect2_table)>0) {
+      temp=mutect2_table[chr==thischr & filter=='PASS' & Callers=='Mutect 2 and Strelka',]
+      if (nrow(temp)>0) {
+        g=g+geom_point(aes(x=start,y=TUMOR -0.5,fill=type,shape=type),data = temp,alpha=1)+
+          scale_fill_manual(values = c("A>C"="#1B9E77","A>G"="#D95F02", "A>T"="#7570B3", "C>A"="#E7298A", "C>G"="#66A61E", "C>T"="#E6AB02", "del"="#A6761D", "ins"="#666666"))+
+          scale_shape_manual(values=c("A>C"=21,"A>G"=21, "A>T"=21, "C>A"=21, "C>G"=21, "C>T"=21, "del"=24, "ins"=25))#+
+        #scale_color_manual(values=c('<5'='lightgrey','≥5'='black'))
+
+        g=g+geom_label_repel(data = temp[temp$Amino_acids!='',],
+                             mapping = aes(x=start,y=TUMOR -0.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
+                             inherit.aes = F,size=3,min.segment.length = 0,nudge_y = 0.3)
+      }
+    }
+
+    ### SNPS + germline mutation (at the corresponding track)
+    if (exists('tbaf')) {
+      g=g+geom_point(aes(x=Position,y=BAF -1.5),data = tbaf[tbaf$Chromosome==thischr,],alpha=1/8,shape='.')
+    } else if (exists('ascat_tbaf'))  {
+      g=g+geom_point(aes(x=Position,y=BAF -1.5),data = ascat_tbaf[ascat_tbaf$Chr==thischr,],alpha=1/8,shape='.')
+    }
+    if (exists('nbaf')) {
+      g=g+geom_point(aes(x=Position,y=BAF -2.5),data = nbaf[nbaf$Chromosome==thischr,],alpha=1/8,shape='.')
+    } else if (exists('ascat_nbaf')) {
+      g=g+geom_point(aes(x=Position,y=NBAF -2.5),data = ascat_nbaf[ascat_nbaf$Chr==thischr,],alpha=1/8,shape='.')
+    }
+    ## Germline muts
+    if (exists('haplotypecaller_table')) {
+      temp=haplotypecaller_table[keep_haplotypecaller][chr==thischr]
+      g=g+
+        geom_point(aes(x=start,y=AF_t -1.5,fill=type,shape=type),
+                   data = temp,alpha=1)+
+        geom_label_repel(data = temp[Amino_acids!='',],
+                         mapping = aes(x=start,y=AF_t -1.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
+                         inherit.aes = F,size=3,min.segment.length = 0)
+      g=g+
+        geom_point(aes(x=start,y=AF -2.5,fill=type,shape=type),
+                   data = temp,alpha=1)+
+        geom_label_repel(data = temp[Amino_acids!='',],
+                         mapping = aes(x=start,y=AF -2.5,label=paste(SYMBOL,Protein_position,Amino_acids)),
+                         inherit.aes = F,size=3,min.segment.length = 0)
+    }
+
+    #genes!
+    temp=allgenes[name %in% tumorgenes$`Gene Symbol` & chr==thischr]
+    g=g+geom_text_repel(mapping = aes(x = (start+end)/2,y =  -2.6,label=name),
+                        data=temp,
+                        nudge_y= -0.1,size=2)
+    return(g)
+  }
 ```
 
 
