@@ -1495,31 +1495,25 @@ if (length(mutect2_file)>0) {
   # keep only PASS
   tmuts=tmuts[filter=='PASS',]
   
-  # ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
-  # # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
-  # key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
-  # key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
-  # key1_refAF[is.na(value),1]=0
-  # tmuts$allele1_swegen_count=key1_refAF$value
-  # remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
-  # tmuts <- tmuts[!remove,] # filtered.
-  
+ 
   
   # VEP annotation is put in annotation_table
-  annotation_table=matrix(data = NA,nrow = nrow(tmuts),ncol = length(vep_header))
-  colnames(annotation_table)=vep_header
+  annotation_table=matrix(data = NA,nrow = length(unlist(tmuts$CSQ)),ncol = length(vep_header)+1)
+  colnames(annotation_table)=c('N',vep_header)
+  row=1
   for (i in 1:nrow(tmuts)) { # for each variant
     # for each VEP annotation:
     for (j in 1:length(tmuts$CSQ[[i]])) { 
       line=strsplit(tmuts$CSQ[[i]][j],'\\|')[[1]]
-      annotation_table[i,1:length(line)]=line
+      annotation_table[row,1]=i
+      annotation_table[row,1+(1:length(line))]=line
+      row=row+1
     }
   }
-  
-  
-  
+
   # Annotation table then concatenated 
-  mutect2_table=cbind(tmuts,annotation_table)
+  tmuts$N=as.character(1:nrow(tmuts))
+  mutect2_table=merge(tmuts,annotation_table,by='N')
   
   # Keep high/mod-relevance in final output
   impact=which(mutect2_table$IMPACT %in% c('HIGH','MODERATE'))
@@ -1677,29 +1671,23 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   # keep only PASS
   tmuts=tmuts[filter=='PASS',]
   
-  # ## Before adding the (LARGE) info and annotation fields, filter with Swegen 
-  # # Make 2 key sets: key1 and key2. If variant has 2 alt alleles, remove if both alleles satisfy criteria.
-  # key1 <- paste(tmuts$chr,tmuts$start,tmuts$alt)
-  # key1_refAF <- swegen_hg38_allele_counts[key1,.(value)]
-  # key1_refAF[is.na(value),1]=0
-  # tmuts$allele1_swegen_count=key1_refAF$value
-  # remove <- key1_refAF$value>=2 #remove SNP if allele1 is ≥2
-  # tmuts <- tmuts[!remove,] # filtered.
-  # 
-  
   # VEP annotation is put in annotation_table
-  annotation_table=matrix(data = NA,nrow = nrow(tmuts),ncol = length(vep_header))
-  colnames(annotation_table)=vep_header
+  annotation_table=matrix(data = NA,nrow = length(unlist(tmuts$CSQ)),ncol = length(vep_header)+1)
+  colnames(annotation_table)=c('N',vep_header)
+  row=1
   for (i in 1:nrow(tmuts)) { # for each variant
     # for each VEP annotation:
     for (j in 1:length(tmuts$CSQ[[i]])) { 
       line=strsplit(tmuts$CSQ[[i]][j],'\\|')[[1]]
-      annotation_table[i,1:length(line)]=line
+      annotation_table[row,1]=i
+      annotation_table[row,1+(1:length(line))]=line
+      row=row+1
     }
   }
-  
+
   # Annotation table then concatenated 
-  strelka_snvs=cbind(tmuts,annotation_table)
+  tmuts$N=as.character(1:nrow(tmuts))
+  strelka_snvs=merge(tmuts,annotation_table,by='N')
   
   # Filter takes place here, as the variant rownames are not compatible with Swegen/Mutect/Haplotypecaller
   # filter by RSID
@@ -1789,18 +1777,23 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   
   
   # VEP annotation is put in annotation_table
-  annotation_table=matrix(data = NA,nrow = nrow(tmuts),ncol = length(vep_header))
-  colnames(annotation_table)=vep_header
+  # VEP annotation is put in annotation_table
+  annotation_table=matrix(data = NA,nrow = length(unlist(tmuts$CSQ)),ncol = length(vep_header)+1)
+  colnames(annotation_table)=c('N',vep_header)
+  row=1
   for (i in 1:nrow(tmuts)) { # for each variant
     # for each VEP annotation:
     for (j in 1:length(tmuts$CSQ[[i]])) { 
       line=strsplit(tmuts$CSQ[[i]][j],'\\|')[[1]]
-      annotation_table[i,1:length(line)]=line
+      annotation_table[row,1]=i
+      annotation_table[row,1+(1:length(line))]=line
+      row=row+1
     }
   }
-  
+
   # Annotation table then concatenated 
-  strelka_indels=cbind(tmuts,annotation_table)
+  tmuts$N=as.character(1:nrow(tmuts))
+  strelka_indels=merge(tmuts,annotation_table,by='N')
   
   # Filter takes place here, as the variant rownames are not compatible with Swegen/Mutect/Haplotypecaller
   # filter by RSID
@@ -2111,18 +2104,23 @@ if (length(haplotypecaller_N_file)>0) {
   vep_header=strsplit(vep_header,'\\|')[[1]]
   
   # VEP annotation is put in annotation_table
-  annotation_table=matrix(data = NA,nrow = nrow(nmuts),ncol = length(vep_header))
-  colnames(annotation_table)=vep_header
+  annotation_table=matrix(data = NA,nrow = length(unlist(nmuts$CSQ)),ncol = length(vep_header)+1)
+  colnames(annotation_table)=c('N',vep_header)
+  row=1
   for (i in 1:nrow(nmuts)) { # for each variant
     # for each VEP annotation:
     for (j in 1:length(nmuts$CSQ[[i]])) { 
       line=strsplit(nmuts$CSQ[[i]][j],'\\|')[[1]]
-      annotation_table[i,1:length(line)]=line
+      annotation_table[row,1]=i
+      annotation_table[row,1+(1:length(line))]=line
+      row=row+1
     }
   }
-  
+
   # Annotation table then concatenated 
-  haplotypecaller_table=cbind(nmuts,annotation_table)
+  nmuts$N=as.character(1:nrow(nmuts))
+  haplotypecaller_table=merge(nmuts,annotation_table,by='N')
+  
   
   
   # double check Swegen in case ID was not matched (rsid in reference but not in data)
