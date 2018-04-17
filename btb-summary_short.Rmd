@@ -109,6 +109,13 @@ kable(chrsz, "html") %>%
 
 Tralala
 
+```{r plot_manta, echo=FALSE,fig.width=15,fig.height=8}
+
+for ( i in 1:3) print(qplot(rnorm(1000),rnorm(1000)))
+
+
+```
+
 #### tjosan
 
 mämä
