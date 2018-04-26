@@ -113,10 +113,44 @@ library(knitr)
 library(htmlTable)
 library(kableExtra)
 
+
 listfix <- function(list) {
   l=lapply(list,length)
   for (i in which(l!=1)) list[[i]]=0
   unlist(list)
+}
+
+makelinks <- function(strings,sep='&') {
+  for (i in 1:length(strings)) if (strings[i]!='') {
+    t=strsplit(strings[i],sep)[[1]]
+    for (j in 1:length(t)) {
+      if (t[j] %in% alltumorgenes) {
+        t[j]=cell_spec(t[j], link = paste0("https://cancer.sanger.ac.uk/cosmic/gene/analysis?ln=",t[j]),format = 'html')
+      } else if (startsWith(t[j],'rs')) {
+        t[j]=cell_spec(t[j], link = paste0("https://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=",substr(t[j],3,100)),format = 'html')
+      } else if (startsWith(t[j],'COSM')) {
+        t[j]=cell_spec(t[j], link = paste0("https://cancer.sanger.ac.uk/cosmic/mutation/overview?id=",substr(t[j],5,100)),format = 'html')
+      }
+    }
+    strings[i]=paste(t,collapse = ' ')
+  }
+  return(strings)
+}
+
+tableWrapper <- function(table) {
+  if ('Existing_variation' %in% colnames(table)) {
+    table$ExistingVaritaion=makelinks(table$ExistingVariation)
+  }
+  if ('Gene_Name' %in% colnames(table)) {
+    table$Gene_Name=makelinks(table$Gene_Name)
+  }
+  if ('SYMBOL' %in% colnames(table)) {
+    table$SYMBOL=makelinks(table$SYMBOL)
+  }
+  if ('cancer_genes' %in% colnames(table)) {
+    table$cancer_genes=makelinks(table$cancer_genes,sep=' ')
+  }
+  htmlTable(table, col.rgroup = c("none", "#F7F7F7"))
 }
 
 sampleData <- data.table(
@@ -148,7 +182,7 @@ swegen_hg38_manta_all=fread('~/reports/swegen_sv_counts.csv',key='name')
 allgenes=fread('~/reports/genes_ensemble_canonical.csv',key='name')
 tumorgenes=fread('~/reports/cancer_gene_census.csv',key='Gene Symbol')
 oncokb_tumorgenes=fread('~/reports/OncoKB_CancerGenesList.txt',key='Hugo Symbol')
-#oncokb_actionable=fread('~/reports/OncoKB-allActionableVariants.txt',key='Gene')
+oncokb_actionable=fread('~/reports/OncoKB-allActionableVariants.txt',key='Gene')
 local_tumorgenes=fread('~/reports/2018_gene_list_tere_ref.csv',key='Gene')[Gene!='',1:2]
 alltumorgenes=unique(c(tumorgenes$`Gene Symbol`,oncokb_tumorgenes$`Hugo Symbol`,local_tumorgenes$Gene))
 alltier1=union(tumorgenes[Tier==1,`Gene Symbol`],local_tumorgenes[`Tier 1 and 2 for pediatric cancers final`==1,Gene])
@@ -308,14 +342,7 @@ if (length(freec_Tratio_file)>0 &
   
   freec_cnv=cnvs[order(rank_score,decreasing = T)]
   
-  htmlTable(freec_cnv, col.rgroup = c("none", "#F7F7F7")) #%>%
-  #kable_styling(bootstrap_options = "striped",position = "left") %>%
-  #scroll_box(width = "1400px", height = "600px")# %>%
-  # row_spec(row = which(cnvs$Gene_Tier==2 | cnvs$Effect_Tier==2), background = "#FF500040") %>%
-  # row_spec(row = which(cnvs$Gene_Tier==1 | cnvs$Effect_Tier==1), background = "#FFFF0040") %>%
-  # row_spec(row = which(cnvs$Gene_Tier==1 & cnvs$Effect_Tier==1), background = "#00FF0040")
-  # 
-  
+  tableWrapper(freec_cnv)
 }
 ```
 
@@ -504,9 +531,7 @@ if (length(ascat_Tratio_file)>0 &
   #     }
   #   }
   # }
-  htmlTable(ascat_cnv, col.rgroup = c("none", "#F7F7F7")) #%>%
-  #kable_styling(bootstrap_options = "striped",position = "left") %>%
-  #scroll_box(width = "1400px", height = "600px")
+  tableWrapper(ascat_cnv)
 }
 ```
 
@@ -853,12 +878,7 @@ if (length(vep_Tstruct_file)>0) {
 
 
 manta_tumor_selected <- selection[order(rank_score,decreasing = T)]
-htmlTable(manta_tumor_selected[rank_score>2], col.rgroup = c("none", "#F7F7F7")) #%>%
-#kable_styling(bootstrap_options = "striped",position = "left") %>%
-#column_spec(7, width = "20em") %>%
-#column_spec(9, width = "20em") %>%
-#scroll_box(width = "1400px", height = "600px")
-
+tableWrapper(manta_tumor_selected[rank_score>2])
 }
 ```
 
@@ -1192,11 +1212,7 @@ if (length(vep_Nstruct_file)>0) {
   # }
   
   manta_normal_selected <- selection[order(rank_score,decreasing = T)]
-  htmlTable(manta_normal_selected[rank_score>2], col.rgroup = c("none", "#F7F7F7")) #%>%
-  #kable_styling(bootstrap_options = "striped",position = "left") %>%
-  #column_spec(7, width = "20em") %>%
-  #column_spec(9, width = "20em") %>%
-  #scroll_box(width = "1400px", height = "600px")
+  tableWrapper(manta_normal_selected[rank_score>2])
   
 }
 
@@ -1402,7 +1418,7 @@ if (length(mutect2_file)>0) {
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,in_tumorgene,in_cosmic)))
   selection <- mutect2_table[
     keep,
-    .(VARIANT_CLASS,Existing_variation,chr,start,end,
+    .(VARIANT_CLASS,Existing_variation=makelinks(Existing_variation),chr,start,end,
       Swegen_count,Cosmic_count=cosmic_n,SYMBOL,Protein_pos=Protein_position,Amino_acids,
       rank_score=0,rank_terms='',LOH='',
       Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
@@ -1492,9 +1508,7 @@ if (length(mutect2_file)>0) {
   
   mutect2_selected <- selection[order(rank_score,decreasing = T)]
   
-  htmlTable(mutect2_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
-  #kable_styling(bootstrap_options = "striped",position = "left") %>%
-  #scroll_box(width = "1400px", height = "600px")
+  tableWrapper(mutect2_selected)
   
 }
 ```
@@ -1812,9 +1826,7 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   
   
   # print table
-  htmlTable(strelka_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
-  #kable_styling(bootstrap_options = "striped",position = "left") %>%
-  #scroll_box(width = "1000px", height = "600px")
+  tableWrapper(strelka_selected)
   
   
   
@@ -2163,9 +2175,7 @@ if (length(haplotypecaller_N_file)>0) {
   
   haplotypecaller_selected <- selection[order(rank_terms)][order(rank_score,decreasing = T)]
   
-  htmlTable(haplotypecaller_selected, col.rgroup = c("none", "#F7F7F7")) #%>%
-  #kable_styling(bootstrap_options = "striped",position = "left") %>%
-  #scroll_box(width = "1400px", height = "600px")
+  tableWrapper(haplotypecaller_selected)
   
 }
 ```
@@ -2179,7 +2189,7 @@ if (length(haplotypecaller_N_file)>0) {
 
 # make several small tables, from which results can be copy-pasted. 
 # each is just a subset (incl sample id) if the sorted "selected" variants.
-
+cat('Mutect2')
 t=head(mutect2_selected,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2192,7 +2202,7 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-
+cat('Strelka')
 t=head(strelka_selected,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2205,7 +2215,7 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-
+cat('HaplotypeCaller')
 t=head(haplotypecaller_selected,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2218,7 +2228,7 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-
+cat('Manta somatic')
 t=head(manta_tumor_selected,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2231,7 +2241,7 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-
+cat('Manta germline')
 t=head(manta_normal_selected,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2244,7 +2254,7 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-
+cat('Control Freec')
 t=head(freec_cnv,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2257,6 +2267,7 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
+cat('Ascat')
 t=head(ascat_cnv,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2311,7 +2322,7 @@ sampleList <- list(
   )
 )
 names(sampleList)=sampleData$name
-save(sampleList,file=paste0('~/reports/',sampleData$name,'_data.Rata'))
+save(sampleList,file=paste0('~/reports/',sampleData$name,'_data.Rdata'))
 ```
 
 

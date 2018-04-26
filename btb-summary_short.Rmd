@@ -48,6 +48,7 @@ library(ggplot2)
 library(ggrepel)
 library(VariantAnnotation)
 library(gridExtra)
+library(htmlTable)
 chrsz=structure(list(chr = c("1", "2", "3", "4", "5", "6", "7", "8", 
 "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", 
 "20", "21", "22", "X", "Y"), starts = c(0, 253902921, 500669562, 
@@ -97,6 +98,11 @@ snpEff_mutect2_file=grep(pattern = glob2rx("*SnpEff/mutect2_*vcf.ann.vcf"),files
 ### Mid1 
 
 ```{r}
+
+
+sampleData$link="<a href='https://cancer.sanger.ac.uk/cosmic/mutation/overview?id=0029964'>rs990029964</a>"
+htmlTable(sampleData, col.rgroup = c("none", "#F7F7F7"))
+
 kable(sampleData, "html") %>%
   kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
 
