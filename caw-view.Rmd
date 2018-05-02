@@ -121,7 +121,7 @@ listfix <- function(list) {
 }
 
 makelinks <- function(strings,sep='&') {
-  for (i in 1:length(strings)) if (strings[i]!='') {
+  if (length(strings)>0) for (i in 1:length(strings)) if (strings[i]!='') {
     t=strsplit(strings[i],sep)[[1]]
     for (j in 1:length(t)) {
       if (t[j] %in% alltumorgenes) {
@@ -139,7 +139,7 @@ makelinks <- function(strings,sep='&') {
 
 tableWrapper <- function(table) {
   if ('Existing_variation' %in% colnames(table)) {
-    table$ExistingVaritaion=makelinks(table$ExistingVariation)
+    table$Existing_variation=makelinks(table$Existing_variation)
   }
   if ('Gene_Name' %in% colnames(table)) {
     table$Gene_Name=makelinks(table$Gene_Name)
@@ -561,7 +561,7 @@ if (exists('tratio')) {
   # tumor logR
   g=g+geom_point(aes(x=cumstart,y=Ratio,col=CopyNumber),data=temp,alpha=1/5,shape='.')
   # add smoothed
-  g=g+geom_line(aes(x=cumpos,y=tratio),stat="identity",colour="green",data=binned)
+  #g=g+geom_line(aes(x=cumpos,y=tratio),stat="identity",colour="green",size=0.1,data=binned)
   
   g=g+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
             axis.title.x=element_blank(),
@@ -626,7 +626,7 @@ if (exists('ascat_tratio')) {
   # using smoothed logR
   g=g+geom_point(aes(x=cumstart,y=smoothed,color=CopyNumber),data=temp,alpha=1/5,shape='.')
   # add smoothed
-  g=g+geom_line(aes(x=cumpos,y=tratio),stat="identity",colour="green",data=ascat_binned)
+  #g=g+geom_line(aes(x=cumpos,y=tratio),stat="identity",colour="green",size=0.1,data=ascat_binned)
   
   g=g+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
             axis.title.x=element_blank(),
@@ -831,13 +831,13 @@ if (length(vep_Tstruct_file)>0) {
           selection$rank_terms[i]=paste(selection$rank_terms[i],'cosmic_>1')
         }
         if (paste(gene,collapse = ' ') %in% allfusionpairs) {
-          selection$rank_score[i]=selection$rank_score[i]+3
+          selection$rank_score[i]=selection$rank_score[i]+2
           selection$rank_terms[i]=paste(selection$rank_terms[i],'CGC_fusion')
         } else if (any(gene %in% allfusion)) {
-          selection$rank_score[i]=selection$rank_score[i]+2
+          selection$rank_score[i]=selection$rank_score[i]+1
           selection$rank_terms[i]=paste(selection$rank_terms[i],'partial_CGC_fusion')
         } else {
-          selection$rank_score[i]=selection$rank_score[i]+1
+          selection$rank_score[i]=selection$rank_score[i]+0
           selection$rank_terms[i]=paste(selection$rank_terms[i],'fusion')
         }
       }
@@ -1037,13 +1037,13 @@ if (length(vep_Nstruct_file)>0) {
         selection$rank_terms[i]=paste(selection$rank_terms[i],'cosmic_>1')
       }
       if (paste(gene,collapse = ' ') %in% allfusionpairs) {
-        selection$rank_score[i]=selection$rank_score[i]+3
+        selection$rank_score[i]=selection$rank_score[i]+2
         selection$rank_terms[i]=paste(selection$rank_terms[i],'CGC_fusion')
       } else if (any(gene %in% allfusion)) {
-        selection$rank_score[i]=selection$rank_score[i]+2
+        selection$rank_score[i]=selection$rank_score[i]+1
         selection$rank_terms[i]=paste(selection$rank_terms[i],'partial_CGC_fusion')
       } else {
-        selection$rank_score[i]=selection$rank_score[i]+1
+        selection$rank_score[i]=selection$rank_score[i]+0
         selection$rank_terms[i]=paste(selection$rank_terms[i],'fusion')
       }
     }
@@ -1418,7 +1418,7 @@ if (length(mutect2_file)>0) {
   keep <- sort(unique(c(impact,clinvar_pathogenic,polyphen_damaging,sift_deleterious,in_tumorgene,in_cosmic)))
   selection <- mutect2_table[
     keep,
-    .(VARIANT_CLASS,Existing_variation=makelinks(Existing_variation),chr,start,end,
+    .(VARIANT_CLASS,Existing_variation,chr,start,end,
       Swegen_count,Cosmic_count=cosmic_n,SYMBOL,Protein_pos=Protein_position,Amino_acids,
       rank_score=0,rank_terms='',LOH='',
       Consequence,IMPACT,CLIN_SIG,PolyPhen,SIFT,
@@ -1944,7 +1944,7 @@ if (length(haplotypecaller_N_file)>0) {
   
   vcf_t=readVcf(file = haplotypecaller_T_file,genome ='GRCh38')
   vcf_t=vcf_t[names(vcf_t) %in% names(vcf)] # 22k återstår, alltså bara var 3dje från N
-  vcf=vcf[names(vcf) %in% names(vcf_t)] # rensa även bort de som är specifika för N
+  #vcf=vcf[names(vcf) %in% names(vcf_t)] # rensa även bort de som är specifika för N <-- skippar det
   vcf_t=vcf_t[match(names(vcf),names(vcf_t))] # ordning är nu matchad
   ix_NinT=match(names(vcf),names(vcf_t)) # how to pick from vcf_t to match vcf (not really needed anymore)
   g=geno(vcf)
@@ -2184,12 +2184,12 @@ if (length(haplotypecaller_N_file)>0) {
 
 ## All {.tabset .active}
 
-### Combined table {.active}
-```{r combined_findings}
-
+### Top ranked {.active}
+#### Mutect 2
+```{r}
 # make several small tables, from which results can be copy-pasted. 
 # each is just a subset (incl sample id) if the sorted "selected" variants.
-cat('Mutect2')
+#cat('Mutect2')
 t=head(mutect2_selected,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2202,7 +2202,10 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-cat('Strelka')
+```
+#### Strelka
+```{r}
+#cat('Strelka')
 t=head(strelka_selected,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2215,7 +2218,10 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-cat('HaplotypeCaller')
+```
+#### HaplotypeCaller
+```{r}
+#cat('HaplotypeCaller')
 t=head(haplotypecaller_selected,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2228,7 +2234,10 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-cat('Manta somatic')
+```
+#### Manta somatic
+```{r}
+#cat('Manta somatic')
 t=head(manta_tumor_selected,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2241,7 +2250,10 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-cat('Manta germline')
+```
+#### Manta germline
+```{r}
+#cat('Manta germline')
 t=head(manta_normal_selected,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2254,7 +2266,10 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-cat('Control Freec')
+```
+#### Control Freec
+```{r}
+#cat('Control Freec')
 t=head(freec_cnv,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2267,7 +2282,10 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
-cat('Ascat')
+```
+#### Ascat
+```{r}
+#cat('Ascat')
 t=head(ascat_cnv,50)
 if (nrow(t)>0){ 
   t=data.table(Patient=sampleData$name,
@@ -2280,7 +2298,9 @@ if (nrow(t)>0){
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
 }
+```
 
+```{r save_to_files}
 
 ## Below: saves tables to file.
 
