@@ -1944,7 +1944,7 @@ if (length(haplotypecaller_N_file)>0) {
   
   vcf_t=readVcf(file = haplotypecaller_T_file,genome ='GRCh38')
   vcf_t=vcf_t[names(vcf_t) %in% names(vcf)] # 22k återstår, alltså bara var 3dje från N
-  #vcf=vcf[names(vcf) %in% names(vcf_t)] # rensa även bort de som är specifika för N <-- skippar det
+  vcf=vcf[names(vcf) %in% names(vcf_t)] # rensa även bort de som är specifika för N
   vcf_t=vcf_t[match(names(vcf),names(vcf_t))] # ordning är nu matchad
   ix_NinT=match(names(vcf),names(vcf_t)) # how to pick from vcf_t to match vcf (not really needed anymore)
   g=geno(vcf)
@@ -2201,6 +2201,7 @@ if (nrow(t)>0){
   kable(t[Gene!=''], "html") %>%
   kable_styling(bootstrap_options = "striped",position = "left") %>%
   scroll_box(width = "900px", height = "300px")
+  
 }
 ```
 #### Strelka
@@ -2300,6 +2301,7 @@ if (nrow(t)>0){
 }
 ```
 
+### Save to files
 ```{r save_to_files}
 
 ## Below: saves tables to file.
@@ -2331,7 +2333,7 @@ write.table(
 sampleList <- list(
   nameHere=list(
     sampleData=sampleData,
-    cnvs=cnvs,
+    freec_cnv=freec_cnvc,
     ascat_cnv=ascat_cnv,
     manta_normal_selected=manta_normal_selected,#manta_normal_table,
     manta_tumor_selected=manta_tumor_selected,#manta_tumor_table,
