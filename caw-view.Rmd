@@ -53,12 +53,12 @@ cat('Sample:',basename(getwd()),'\tDirectory:',getwd(),'\nDate:',date())
 files <- dir(recursive = T,full.names = T)
 files <- files[-grep(pattern = '.png',x = files)]
 # control freec files
-freec_Tratio_file <- files[grep(pattern = '[TR].hg38.pileup.gz_ratio.txt',files,perl = T)][1]
-freec_Nratio_file <- files[grep(pattern = '[TR].hg38.pileup.gz_normal_ratio.txt',files,perl = T)][1]
-freec_Tbaf_file <- files[grep(pattern = '[TR].hg38.pileup.gz_BAF.txt',files,perl = T)][1]
-freec_Nbaf_file <- files[grep(pattern = '[BN].hg38.pileup.gz_BAF.txt',files,perl = T)][1]
-freec_info_file <- files[grep(pattern = 'hg38.pileup.gz_info.txt',files,perl = T)][1]
-freec_cnv_file <- files[grep(pattern = "^.*[TR]\\.hg38\\.pileup\\.gz_CNVs$",files,perl = T)][1]
+freec_Tratio_file <- files[grep(pattern = '[TR].hg38.pileup.gz_ratio.txt',files,perl = T)]
+freec_Nratio_file <- files[grep(pattern = '[TR].hg38.pileup.gz_normal_ratio.txt',files,perl = T)]
+freec_Tbaf_file <- files[grep(pattern = '[TR].hg38.pileup.gz_BAF.txt',files,perl = T)]
+freec_Nbaf_file <- files[grep(pattern = '[BN].hg38.pileup.gz_BAF.txt',files,perl = T)]
+freec_info_file <- files[grep(pattern = 'hg38.pileup.gz_info.txt',files,perl = T)]
+freec_cnv_file <- files[grep(pattern = "^.*[TR]\\.hg38\\.pileup\\.gz_CNVs$",files,perl = T)]
 # Ascat files
 ascat_Tratio_file <- files[grep(pattern = "^.*Ascat.*[TR]\\.LogR$",files)]
 ascat_Nratio_file <- files[grep(pattern = "^.*Ascat.*[BN]\\.LogR$",files)]
@@ -209,6 +209,7 @@ cosmic_fusions=fread('~/reports/cosmic_fusions.csv',key = 'name')
 <!-- Read Control Freec copy number data -->
 ```{r load_control_freec}
 cnvs=NULL
+freec_cnv=NULL
 if (length(freec_Tratio_file)>0 &
     length(freec_Nratio_file)>0 &
     length(freec_Tbaf_file)>0 &
@@ -674,6 +675,7 @@ if (exists('ascat_binned')) {
 <!-- Read the tumor structural variant data -->
 ### Manta (tumor)
 ```{r load_manta_tumor, echo=FALSE}
+manta_tumor_selected=NULL
 if (length(vep_Tstruct_file)>0) {
   tstruc_vcf=readVcf(file = vep_Tstruct_file,genome = 'GRCh38')
   g=geno(tstruc_vcf)
@@ -864,27 +866,31 @@ if (length(vep_Tstruct_file)>0) {
     }
     
     
+    
+    # Add Control Freec LOH.
+    if (nrow(selection)>0 & !is.null(freec_loh)) for (i in 1:nrow(selection)) {
+      ix=freec_loh$chr==selection$chr[i] &
+        freec_loh$start<selection$start[i] &
+        freec_loh$end>selection$end[i]
+      ix=ix[!is.na(ix)]
+      if (sum(ix) >0) selection$LOH[i]='Y'
+    }
+    
+    
+    
+    manta_tumor_selected <- selection[order(rank_score,decreasing = T)]
+    tableWrapper(manta_tumor_selected[rank_score>2])
+    
   }
   
-  # Add Control Freec LOH.
-  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
-    ix=freec_loh$chr==selection$chr[i] &
-      freec_loh$start<selection$start[i] &
-      freec_loh$end>selection$end[i]
-    ix=ix[!is.na(ix)]
-    if (sum(ix) >0) selection$LOH[i]='Y'
-  }
   
-
-
-manta_tumor_selected <- selection[order(rank_score,decreasing = T)]
-tableWrapper(manta_tumor_selected[rank_score>2])
 }
 ```
 
 <!-- Read the normal structural variant data -->
 ### Manta (normal)
 ```{r load_manta_normal, echo=FALSE}
+manta_normal_selected=NULL
 if (length(vep_Nstruct_file)>0) {
   nstruc_vcf=readVcf(file = vep_Nstruct_file,genome = 'GRCh38')
   g=geno(nstruc_vcf)
@@ -921,7 +927,8 @@ if (length(vep_Nstruct_file)>0) {
   nstruc <- nstruc[Swegen_count<2]
   
   # loop through all and extract endpoint chr and pos
-  for (i in 1:nrow(nstruc)) {
+  if (nrow(nstruc)>0) {
+    for (i in 1:nrow(nstruc)) {
     t=strsplit(x = nstruc$ALT[[i]],split = ':')[[1]]
     if (length(t)>1 & t[1]!="<DUP") {
       tchr=strsplit(x = t[1],split = 'chr')[[1]][2]
@@ -1067,155 +1074,23 @@ if (length(vep_Nstruct_file)>0) {
       selection$rank_score[ix]=selection$rank_score[ix]-1
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'long_dup')
     }
+    
+    
+    # Add Control Freec LOH.
+    if (nrow(selection)>0 & !is.null(freec_loh)) for (i in 1:nrow(selection)) {
+      ix=freec_loh$chr==selection$chr[i] &
+        freec_loh$start<selection$start[i] &
+        freec_loh$end>selection$end[i]
+      ix=ix[!is.na(ix)]
+      if (sum(ix) >0) selection$LOH[i]='Y'
+    }
+    
+    
+    manta_normal_selected <- selection[order(rank_score,decreasing = T)]
+    tableWrapper(manta_normal_selected[rank_score>2])
   }
-  
-  # Add Control Freec LOH.
-  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
-    ix=freec_loh$chr==selection$chr[i] &
-      freec_loh$start<selection$start[i] &
-      freec_loh$end>selection$end[i]
-    ix=ix[!is.na(ix)]
-    if (sum(ix) >0) selection$LOH[i]='Y'
-  }
-  
-  
-  # # annotation is in the CSQ column.
-  # h=strsplit(info(header(nstruc_vcf))['CSQ',][,3],'Format: ')[[1]][2]
-  # vep_header=strsplit(h,'\\|')[[1]]
-  # 
-  # # VEP annotation is put in annotation_table
-  # annotation_table=matrix(data = NA,nrow = length(unlist(nstruc$CSQ)),ncol = length(vep_header)+1)
-  # colnames(annotation_table)=c('N',vep_header)
-  # row=1
-  # for (i in 1:nrow(nstruc)) { # for each variant
-  #   # for each VEP annotation:
-  #   for (j in 1:length(nstruc$CSQ[[i]])) { 
-  #     line=strsplit(nstruc$CSQ[[i]][j],'\\|')[[1]]
-  #     annotation_table[row,1]=i
-  #     annotation_table[row,1+(1:length(line))]=line
-  #     row=row+1
-  #   }
-  # }
-  # annotation_table=as.data.table(annotation_table)
-  # 
-  # # Add to data
-  # nstruc$N=as.character(1:nrow(nstruc))
-  # manta_normal_table <- merge(nstruc,annotation_table,by='N')[order(cumstart),-1]
-  # 
-  # # Deletion: consider only deletions <3MB for "transcript ablation" consequence, report census gene(s)
-  # del_ok <- which(manta_normal_table$SVTYPE=='DEL' & abs(manta_normal_table$SVLEN)<3e6)
-  # # Amplification: consider <5M for amplification consequence, report census genes
-  # amp_ok <- which(manta_normal_table$SVTYPE=='DUP' & abs(manta_normal_table$SVLEN)<5e6)
-  # # Fusions/disrupting: Do the SVs start/end at gene? 
-  # manta_normal_table$Starts_Near <- ''
-  # manta_normal_table$Ends_Near <- ''
-  # manta_normal_table$Junction <- ''
-  # cumstart=allgenes$cumstart
-  # cumend=allgenes$cumend
-  # for (i in 1:nrow(manta_normal_table)) {
-  #   i=as.integer(i)
-  #   #cat(i,'\n')
-  #   g=manta_normal_table$SYMBOL[i]
-  #   # genes overlapping SV start
-  #   t=manta_normal_table$cumstart[i]
-  #   ix=cumstart-10e3 < t & cumend +10e3 > t
-  #   if (length(ix)>0) {
-  #     genes=allgenes[ix,unique(name)]
-  #     set(manta_normal_table,i,'Starts_Near',value=paste(genes,collapse = ' '))
-  #     if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
-  #   }
-  #   # genes overlapping SV end
-  #   t=manta_normal_table$altcumpos[i]
-  #   ix=cumstart-10e3 < t & cumend +10e3 > t
-  #   if (length(ix)>0) {
-  #     genes=allgenes[ix,unique(name)]
-  #     set(manta_normal_table,i,'Ends_Near',value=paste(genes,collapse = ' '))
-  #     if (g %in% genes) set(manta_normal_table,i,'Junction',value='Y')
-  #   }
-  # }
-  # # Inside genes: Junctions may be putative fusion or knock-out if either end is "this" gene.
-  # afflicted_ok <- which(manta_normal_table$Junction=='Y')
-  # 
-  # ## Make new table with predicted effects
-  # selection <- unique(
-  #   manta_normal_table[unique(sort(c(del_ok, amp_ok, afflicted_ok))),
-  #                      .(SVTYPE,ID=THISID,chr,start,end,SVLEN=unlist(SVLEN),
-  #                        SYMBOL,Starts_Near,Ends_Near,
-  #                        Gene_Tier=3,Effect_Tier=3,LOH='',Comment='',
-  #                        Consequence,REF,altpos,ALT=unlist(ALT))]
-  # )
-  # 
-  # # Set gene tier to 1,2 based on Cosmic
-  # selection[SYMBOL %in% tumorgenes$`Gene Symbol` | SYMBOL %in% local_tumorgenes$Gene]$Gene_Tier <- 2
-  # selection[SYMBOL %in% tumorgenes[Tier==1]$`Gene Symbol`]$Gene_Tier <- 1
-  # selection <- selection[order(Gene_Tier)]
-  # 
-  # # Set Effect tiers: 
-  # for (i in selection[Gene_Tier<3,.I]) {
-  #   symbol=selection$SYMBOL[i]
-  #   starts_at=selection$Starts_Near[i]
-  #   ends_at=selection$Ends_Near[i]
-  #   length=abs(selection$SVLEN[i])
-  #   gene=tumorgenes[`Gene Symbol`==symbol,] # this gene from Cosmic table
-  #   # first fusions/translocations
-  #   g=grep('fusion',gene$`Role in Cancer`)
-  #   if (length(g)>0) { # fusion gene yes
-  #     if (symbol %in% c(starts_at,ends_at)) { # and the start or end is at this (SYMBOL) gene
-  #       # now 1 if perfect match with Cosmic, 2 if partial match
-  #       mates=strsplit(gene$`Translocation Partner`,', ')[[1]] # this gene's common tx mates
-  #       if (starts_at != ends_at) { # if this symbol is either start or end, not both
-  #         if (starts_at %in% mates | ends_at %in% mates) { # and either is a member of known fusion mates
-  #           selection$Effect_Tier[i]=1 # common translocation/fusion
-  #           selection$Comment[i]=paste(selection$Comment[i],'known_fusion')
-  #         } else {
-  #           selection$Effect_Tier[i]=2 # then at least tier 2
-  #           selection$Comment[i]=paste0(selection$Comment[i],'partial_known_fusion')
-  #         }
-  #       }
-  #     }
-  #   }
-  #   # then deletions
-  #   if (selection$SVTYPE[i]=='DEL' & length<3e6) {
-  #     g=grep('TSG',gene$`Role in Cancer`)
-  #     if (length(g)>0) { # Tumor supressor gene yes
-  #       selection$Effect_Tier[i]=1
-  #       selection$Comment[i]=paste(selection$Comment[i],'TSG_del')
-  #     } else { # else 2 unless already one
-  #       selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
-  #       selection$Comment[i]=paste(selection$Comment[i],'non_TSG_del')
-  #     }
-  #   }
-  #   # then amplifications
-  #   if (selection$SVTYPE[i]=='DUP' & length<5e6) {
-  #     g=grep('oncogene',gene$`Role in Cancer`)
-  #     if (length(g)>0) { # Oncogene yes
-  #       selection$Effect_Tier[i]=1
-  #       selection$Comment[i]=paste(selection$Comment[i],'oncogene_dup')
-  #     } else {
-  #       selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2)
-  #       selection$Comment[i]=paste(selection$Comment[i],'non_oncogene_dup')
-  #     }
-  #   }
-  #   # last other disruptions
-  #   if (symbol %in% c(starts_at,ends_at)) { # if the start or end is at this (SYMBOL) gene
-  #     selection$Effect_Tier[i]=min(selection$Effect_Tier[i],2) # some indication of effect!
-  #     selection$Comment[i]=paste(selection$Comment[i],'at_breakpoint')
-  #   }
-  # }
-  # # Add ASCAT LOH.
-  # if (nrow(selection)>0) for (i in 1:nrow(selection)) {
-  #   ix=ascat_cnv$chr==selection$chr[i] &
-  #     ascat_cnv$startpos<selection$start[i] &
-  #     ascat_cnv$endpos>selection$end[i]
-  #   ix=ix[!is.na(ix)]
-  #   if (sum(ix) >0) if (ascat_cnv[ix,LOH][1]=='LOH') selection$LOH[i]='Y'
-  # }
-  
-  manta_normal_selected <- selection[order(rank_score,decreasing = T)]
-  tableWrapper(manta_normal_selected[rank_score>2])
-  
 }
-
+}
 
 ```
 
@@ -1226,7 +1101,7 @@ if (length(vep_Nstruct_file)>0) {
 ### View structural variants {.active}
 ```{r plot_manta, echo=FALSE,fig.width=15,fig.height=8}
 cat(vep_Tstruct_file,'\n',vep_Nstruct_file)
-if (exists('tstruc')) {
+try( if (exists('tstruc')) {
   par(mai=c(0,4,0,2))
   g=ggplot()+ylab('Structural variants')+expand_limits(x=c(0,3210e6))+ylim(-4,4)+
     scale_color_manual(values=c("BND"="#E41A1C", "DEL"="#377EB8", "INV"="#4DAF4A", "INS"="#984EA3", "DUP"="#FF7F00"))+
@@ -1292,7 +1167,7 @@ if (exists('tstruc')) {
   #                                        size=3)
   
   g
-}
+}, silent=T)
 ```
 
 
@@ -1498,13 +1373,13 @@ if (length(mutect2_file)>0) {
   }
   
   # Add Control Freec LOH.
-  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+  try( for (i in 1:nrow(selection)) {
     ix=freec_loh$chr==selection$chr[i] &
       freec_loh$start<selection$start[i] &
       freec_loh$end>selection$end[i]
     ix=ix[!is.na(ix)]
     if (sum(ix) >0) selection$LOH[i]='Y'
-  }
+  }, silent = T)
   
   mutect2_selected <- selection[order(rank_score,decreasing = T)]
   
@@ -1805,13 +1680,13 @@ if (length(strelka_snv_file) * length(strelka_indel_file)>0) {
   }
   
   # Add Control Freec LOH.
-  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+  try( for (i in 1:nrow(selection)) {
     ix=freec_loh$chr==selection$chr[i] &
       freec_loh$start<selection$start[i] &
       freec_loh$end>selection$end[i]
     ix=ix[!is.na(ix)]
     if (sum(ix) >0) selection$LOH[i]='Y'
-  }
+  }, silent=T)
   
   strelka_selected <- selection[order(rank_score,decreasing = T)]
   
@@ -2164,13 +2039,13 @@ if (length(haplotypecaller_N_file)>0) {
   }
   
   # Add LOH.
-  if (nrow(selection)>0) for (i in 1:nrow(selection)) {
+  try( for (i in 1:nrow(selection)) {
     ix=freec_loh$chr==selection$chr[i] &
       freec_loh$start<selection$start[i] &
       freec_loh$end>selection$end[i]
     ix=ix[!is.na(ix)]
     if (sum(ix) >0) selection$LOH[i]='Y'
-  }
+  }, silent=T)
   
   
   haplotypecaller_selected <- selection[order(rank_terms)][order(rank_score,decreasing = T)]
@@ -2239,50 +2114,56 @@ if (nrow(t)>0){
 #### Manta somatic
 ```{r}
 #cat('Manta somatic')
-t=head(manta_tumor_selected,50)
-if (nrow(t)>0){ 
-  t=data.table(Patient=sampleData$name,
-               Somatic='somatic',
-               Gene=t$Gene_Name,
-               Mutation=t$SVTYPE,
-               'Rank score'=t$rank_score,
-               'Rank Terms'=t$rank_terms)
-  kable(t[Gene!=''], "html") %>%
-  kable_styling(bootstrap_options = "striped",position = "left") %>%
-  scroll_box(width = "900px", height = "300px")
-}
+try( {
+  t=head(manta_tumor_selected,50)
+  if (nrow(t)>0){ 
+    t=data.table(Patient=sampleData$name,
+                 Somatic='somatic',
+                 Gene=t$Gene_Name,
+                 Mutation=t$SVTYPE,
+                 'Rank score'=t$rank_score,
+                 'Rank Terms'=t$rank_terms)
+    kable(t[Gene!=''], "html") %>%
+      kable_styling(bootstrap_options = "striped",position = "left") %>%
+      scroll_box(width = "900px", height = "300px")
+  }
+}, silent=T)
 ```
 #### Manta germline
 ```{r}
 #cat('Manta germline')
-t=head(manta_normal_selected,50)
-if (nrow(t)>0){ 
-  t=data.table(Patient=sampleData$name,
-               Somatic='germline',
-               Gene=t$Gene_Name,
-               Mutation=t$SVTYPE,
-               'Rank score'=t$rank_score,
-               'Rank Terms'=t$rank_terms)
-  kable(t[Gene!=''], "html") %>%
-  kable_styling(bootstrap_options = "striped",position = "left") %>%
-  scroll_box(width = "900px", height = "300px")
-}
+try({
+  t=head(manta_normal_selected,50)
+  if (nrow(t)>0){ 
+    t=data.table(Patient=sampleData$name,
+                 Somatic='germline',
+                 Gene=t$Gene_Name,
+                 Mutation=t$SVTYPE,
+                 'Rank score'=t$rank_score,
+                 'Rank Terms'=t$rank_terms)
+    kable(t[Gene!=''], "html") %>%
+      kable_styling(bootstrap_options = "striped",position = "left") %>%
+      scroll_box(width = "900px", height = "300px")
+  }
+},silent=T)
 ```
 #### Control Freec
 ```{r}
 #cat('Control Freec')
-t=head(freec_cnv,50)
-if (nrow(t)>0){ 
-  t=data.table(Patient=sampleData$name,
-               Somatic=t$type,
-               Gene=t$cancer_genes,
-               Mutation=t$effect,
-               'Rank score'=t$rank_score,
-               'Rank Terms'=t$rank_terms)
-  kable(t[Gene!=''], "html") %>%
-  kable_styling(bootstrap_options = "striped",position = "left") %>%
-  scroll_box(width = "900px", height = "300px")
-}
+try({
+  t=head(freec_cnv,50)
+  if (!is.null(t)) if (nrow(t)>0){ 
+    t=data.table(Patient=sampleData$name,
+                 Somatic=t$type,
+                 Gene=t$cancer_genes,
+                 Mutation=t$effect,
+                 'Rank score'=t$rank_score,
+                 'Rank Terms'=t$rank_terms)
+    kable(t[Gene!=''], "html") %>%
+      kable_styling(bootstrap_options = "striped",position = "left") %>%
+      scroll_box(width = "900px", height = "300px")
+  }
+}, silent=T)
 ```
 #### Ascat
 ```{r}
@@ -2312,28 +2193,30 @@ vrB <- as(stvcf, "VRanges")
 writeVcf(obj = vrA[vrA %in% vrB & rowRanges(m2vcf)$FILTER=='PASS'],filename = paste0('~/reports/',sampleData$name,'_forPatterns.vcf'))
 #
 # export bed file of all relevant genomic regions
-write.table(
-  x = unique(rbind(
-    manta_tumor_table[,.(chr,start,end=start)],
-    manta_tumor_table[,.(chr,start=end,end)],
-    manta_tumor_table[!is.na(altpos),.(chr=altchr,start=altpos,end=altpos)],
-    manta_normal_table[,.(chr,start,end=start)],
-    manta_normal_table[,.(chr,start=end,end)],
-    manta_normal_table[!is.na(altpos),.(chr=altchr,start=altpos,end=altpos)],
-    mutect2_table[,.(chr,start,end)],
-    strelka_snvs[,.(chr,start,end)],
-    strelka_indels[,.(chr,start,end)],
-    haplotypecaller_table[,.(chr,start,end)])
-  ),
-  file = paste0('~/reports/',sampleData$name,'_forBamfile.bed'
-  ),
-  sep = '\t',row.names = F,col.names = F)
+try({ 
+  write.table(
+    x = unique(rbind(
+      manta_tumor_table[,.(chr,start,end=start)],
+      manta_tumor_table[,.(chr,start=end,end)],
+      manta_tumor_table[!is.na(altpos),.(chr=altchr,start=altpos,end=altpos)],
+      manta_normal_table[,.(chr,start,end=start)],
+      manta_normal_table[,.(chr,start=end,end)],
+      manta_normal_table[!is.na(altpos),.(chr=altchr,start=altpos,end=altpos)],
+      mutect2_table[,.(chr,start,end)],
+      strelka_snvs[,.(chr,start,end)],
+      strelka_indels[,.(chr,start,end)],
+      haplotypecaller_table[,.(chr,start,end)])
+    ),
+    file = paste0('~/reports/',sampleData$name,'_forBamfile.bed'
+    ),
+    sep = '\t',row.names = F,col.names = F)
+}, silent=T)
 #
 # export a data structure for downstream analysis
 sampleList <- list(
   nameHere=list(
     sampleData=sampleData,
-    freec_cnv=freec_cnvc,
+    freec_cnv=freec_cnv,
     ascat_cnv=ascat_cnv,
     manta_normal_selected=manta_normal_selected,#manta_normal_table,
     manta_tumor_selected=manta_tumor_selected,#manta_tumor_table,
@@ -2663,7 +2546,7 @@ chromplot2=function(thischr) {
     }
 
     #genes!
-    temp=allgenes[name %in% tumorgenes$`Gene Symbol` & chr==thischr]
+    temp=allgenes[name %in% alltumorgenes & chr==thischr]
     g=g+geom_text_repel(mapping = aes(x = (start+end)/2,y =  -2.6,label=name),
                         data=temp,
                         nudge_y= -0.1,size=2)
