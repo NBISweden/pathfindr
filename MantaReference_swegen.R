@@ -58,3 +58,52 @@ save(swegen_hg38_manta_all,swegen_hg38_manta_pass,file='~/Swegen_hg38_Manta_coun
 fwrite(swegen_hg38_manta_all,'~/reports/swegen_sv_counts.csv')
 
 
+
+##### Below: hg19
+
+# For SWEGEN 
+files=dir(pattern = '.vcf')
+
+library(VariantAnnotation)
+library(data.table)
+
+
+allkeys=NULL
+passkeys=NULL
+for (i in 1:length(files)) try( {
+  file=files[i]
+  cat(i,':->',file,'\n')
+  
+  nstruc_vcf=readVcf(file = file,genome = 'GRCh37')
+  g=geno(nstruc_vcf)
+  inf=info(nstruc_vcf)
+  rr=rowRanges(nstruc_vcf)
+  
+  # manipulate into a data frame with relevant data
+  nstruc=as.data.table(rr)
+  nstruc$chr <- nstruc$seqnames
+  #nstruc=nstruc[chr %in% c(1:22,'X','Y')]
+  
+  ## Key has only chr,start,end
+  key=nstruc[,c('chr','start','end')]
+    key$imprecise='(pr)'
+  ## If imprecise, round the pos to 10
+  ix=inf$IMPRECISE==T
+  key$imprecise[ix]='(impr)'
+  key$start[ix]=round(key$start[ix]/10)*10
+  key$end[ix]=round(key$end[ix]/10)*10
+  key=paste(key$chr,key$start,key$end,key$imprecise)
+  # add unique keys from this pat to the long vectors (to be tabled below)
+  passkeys=c(passkeys,unique(key[nstruc$FILTER=='PASS']))
+  allkeys=c(allkeys,unique(key))
+}, silent=T)
+
+save(passkeys,allkeys,file='~/mantakeys_hg19.Rdata')
+
+manta_reference_all <- as.data.table(sort(table(allkeys),decreasing = T))
+colnames(manta_reference_all) <- c('name','value')
+swegen_hg19_manta_all <- manta_reference_all
+setkey(swegen_hg19_manta_all,name)
+
+fwrite(swegen_hg19_manta_all,'~/swegen_sv_counts_hg19.csv')
+

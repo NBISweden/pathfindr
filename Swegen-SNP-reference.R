@@ -131,11 +131,12 @@ save(swegen_hg38_allele_counts,file='../resources/SWEGEN snps/swegen_hg38_allele
 
 
 
-### New code for reading individual VCFs
+### New code for reading individual VCFs  -- Monica
 library(VariantAnnotation)
 library(data.table)
 setwd('~')
 files=dir(path = 'swegenVCF',pattern = 'vcf.gz$',full.names = T)
+
 
 vcf=readGeno(files[1],x='GT')
 snptable=data.table(name=unique(rownames(vcf)),value=1)
@@ -161,6 +162,36 @@ save(snptable,file='snptable_swegen_fromVCF.Rdata',compress = F)
 setkey(snptable,name)
 fwrite(snptable,file = '../resources/SWEGEN snps/snptable_swegen_fromVCF.csv')
 
+
+### New code for reading individual VCFs --- Linda
+library(VariantAnnotation)
+library(data.table)
+#setwd('~')
+#files=dir(path = 'swegenVCF',pattern = 'vcf.gz$',full.names = T)
+files=dir(pattern = 'vcf.gz$',full.names = T)
+
+
+vcf=readGeno(files[1],x='GT')
+snptable=data.table(name=unique(rownames(vcf)),value=1)
+setkey(snptable,name)
+
+for (i in 2:length(files)) {
+  cat(i,files[i])
+  vcf=readGeno(files[i],x='GT')
+  cat('...read VCF.\n')
+  r=unique(rownames(vcf))
+  
+  m = match(r, snptable[,name])
+  
+  snptable[m,'value']=snptable[m,'value']+1
+  
+  new=data.table(name=r[is.na(m)],value=1)
+  snptable=rbind(snptable,new)
+}
+
+
+setkey(snptable,name)
+fwrite(snptable,file = '~/snptable_swegen_fromVCF_hg19.csv')
 
 
 

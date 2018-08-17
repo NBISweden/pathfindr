@@ -88,6 +88,7 @@ colnames(noncoding_table)=c('name','value')
 noncoding_table=noncoding_table[value>1][order(value,decreasing = T)]
 fwrite(noncoding_table,'~/reports/cosmic_noncoding.csv')
 
+
 ### Check out Cosmic Coding
 coding=fread('~/Data/BTBdata/resources/COSMIC/CosmicGenomeScreensMutantExport.tsv')
 coding=coding[,.(`Mutation genome position`)]
@@ -115,4 +116,34 @@ fwrite(fusion_table,'~/reports/cosmic_fusions.csv')
 
 
 
+## Liftover of Cosmic coding/noncoding
+cosmic_coding=fread('~/reports/cosmic_coding.csv',key = 'name')
+cosmic_noncoding=fread('~/reports/cosmic_noncoding.csv',key = 'name')
+cosmic=rbind(cosmic_coding,cosmic_noncoding[!name %in% cosmic_coding$name]) # removes duplicates
+chr=rep('',nrow(cosmic))
+start=rep(0,nrow(cosmic))
+end=rep(0,nrow(cosmic))
+for (i in 1:nrow(cosmic)) {
+  t=strsplit(cosmic$name[i],':')[[1]]
+  chr[i]=t[1]
+  t=strsplit(t[2],'-')[[1]]
+  start[i]=t[1]
+  end[i]=t[2]
+}
+chr[chr=='23']='X'
+chr[chr=='24']='Y'
+chr[chr=='25']='MT'
+library(liftOver)
+library(rtracklayer)
+path = system.file(package="liftOver", "extdata", "hg38ToHg19.over.chain")
+ch = import.chain(path)
+ch
+library(GenomicRanges)
+ranges=GRanges(seqnames = chr,ranges = IRanges(as.numeric(start),as.numeric(end)),mcols=cosmic)
+seqlevelsStyle(ranges) = "UCSC"
+ranges19 = liftOver(ranges, ch)
+ranges19=unlist(ranges19)
+seqlevelsStyle(ranges19) = "Ensembl"
+
+save(ranges19,file = '~/Data/AMLdata/cosmic_hg19.Rdata')
 
