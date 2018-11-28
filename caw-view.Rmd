@@ -47,10 +47,10 @@ cat('Sample:',basename(getwd()),'\tDirectory:',getwd(),'\nDate:',date())
 
 ## Project and reference genome
 
-#project='BTB'
+project='BTB'
 #project='AML-p'
 #project='AML-a'
-project='CLL'
+#project='CLL'
 
 if (project=='BTB') reference_genome='GRCh38' else reference_genome='hg19'
 
@@ -136,6 +136,7 @@ if (project == 'BTB') {
   files <- dir(recursive = T,full.names = T)
 
   remove=unique(c(grep(pattern = '.png',x = files),
+                  grep(pattern = 'ControlFreec',x = files),
                   grep(pattern = 'Annotation.old',x = files),
                   grep(pattern = '/work/',x = files)))
   
@@ -143,6 +144,7 @@ if (project == 'BTB') {
   
   # control freec files
   freec_Tratio_file <- files[grep(pattern = '[TR].hg38.pileup.gz_ratio.txt',files,perl = T)]
+  freec_Nratio_file <- files[grep(pattern = '[TR].hg38.pileup.gz_normal_ratio.txt',files,perl = T)][1]
   freec_Tbaf_file <- files[grep(pattern = '[TR].hg38.pileup.gz_BAF.txt',files,perl = T)]
   freec_Nbaf_file <- files[grep(pattern = '[BN].hg38.pileup.gz_BAF.txt',files,perl = T)][1]
   freec_info_file <- files[grep(pattern = 'hg38.pileup.gz_info.txt',files,perl = T)]
@@ -205,6 +207,12 @@ library(knitr)
 library(htmlTable)
 library(kableExtra)
 library(stringr)
+
+
+info_header_add=data.frame(Number=1,
+                           Type=c('Integer','String','Integer','String'),
+                           Description=c('Swegen observations','Concomitant loss of heterozygosity','Pathfindr rank score', 'Pathfindr rank terms'),
+                           row.names = c('Swegen_count','LOH','Rank_score','Rank_terms'))
 
 
 makelinks <- function(strings,sep='&') {
@@ -739,7 +747,7 @@ if (exists('binned')) for (sample in unique(binned$sample)) {
   cat('Control Freec: ',sample)
   binned$tmaf[binned$tmaf<0]=1
   g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.3,3))+
-    geom_point(aes(x = tratio,y = tmaf,col=chr),data=binned[sample][tratio<1.8])+
+    geom_point(aes(x = tratio,y = tmaf,col=chr,shape=chr),data=binned[sample][tratio<3])+
     xlab('Tumor (1Mb mean) DNA ratio')+ylab('Tumor (1Mb mean) major allele ratio')+
     scale_y_continuous(breaks = seq(0.5,1,0.1)) +
     scale_x_continuous(breaks = seq(0.5,2.5,0.1))+
@@ -804,7 +812,7 @@ if (exists('ascat_tratio')) for (sample in unique(ascat_tratio$sample)) {
 if (exists('ascat_binned')) for (sample in unique(ascat_binned$sample)) {
   cat('ASCAT: ',sample)
   g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.3,3))+
-    geom_point(aes(x = tratio,y = tmaf,col=chr),data=ascat_binned[sample][tratio<1.8])+
+    geom_point(aes(x = tratio,y = tmaf,col=chr,shape=chr),data=ascat_binned[sample][tratio<3])+
     xlab('Tumor (1Mb mean) DNA ratio')+ylab('Tumor (1Mb mean) major allele ratio')+
     scale_y_continuous(breaks = seq(0.5,1,0.1)) +
     scale_x_continuous(breaks = seq(0.5,2.5,0.1))+
@@ -1065,7 +1073,7 @@ if (!is.null(manta_tumor_table)) if (nrow(manta_tumor_table)>0) {
     
     # -1 for duplication if long dup
     ix=intersect(
-      which(selection$SVTYPE=='DUP' & selection$chr==selection$altchr & abs(selection$altpos-selection$start) > 3e6),
+      which(selection$SVTYPE=='DUP' & selection$chr==selection$altchr & abs(selection$altpos-selection$start) > 10e6),
       grep('duplication',selection$Annotation)
     )
     if (length(ix)>0) {
@@ -1073,6 +1081,9 @@ if (!is.null(manta_tumor_table)) if (nrow(manta_tumor_table)>0) {
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'long_dup')
     }
  
+    firstcols=c('ID','sample','Gene_Name','rank_score','rank_terms','LOH','AFreq','Annotation','Annotation_Impact','Swegen_count')
+    cols=colnames(selection)
+    setcolorder(x = selection,neworder = c(firstcols,cols[!cols %in% firstcols]))
     
     manta_tumor_selected <- selection[order(Feature_ID)][order(rank_score,decreasing = T)]
     if (write_tables) fwrite(manta_tumor_selected[,-c('ANN','Gene_ID')][rank_score>1],file=paste0(sampleData$name,'_manta_tumor.csv'))
@@ -1327,7 +1338,7 @@ if (project=='BTB') {
       
       # -1 for duplication if long dup
       ix=intersect(
-        which(selection$SVTYPE=='DUP' & selection$chr==selection$altchr & abs(selection$altpos-selection$start) > 3e6),
+        which(selection$SVTYPE=='DUP' & selection$chr==selection$altchr & abs(selection$altpos-selection$start) > 10e6),
         grep('duplication',selection$Annotation)
       )
       if (length(ix)>0) {
@@ -1345,6 +1356,10 @@ if (project=='BTB') {
           if (sum(ix) >0) selection$LOH[i]='Y'
         }
       },silent=T)
+      
+      firstcols=c('ID','sample','Gene_Name','rank_score','rank_terms','LOH','AFreq','Annotation','Annotation_Impact','Swegen_count')
+      cols=colnames(selection)
+      setcolorder(x = selection,neworder = c(firstcols,cols[!cols %in% firstcols]))
       
       
       manta_normal_selected <- selection[order(Feature_ID)][order(rank_score,decreasing = T)]
@@ -1443,13 +1458,21 @@ if (exists('mutect2_file')) if (length(mutect2_file)>0) {
 
     vcf=readVcf(file = mutect2_file[s],genome = reference_genome)
     vcf=vcf[names(vcf) %in% allpass]
-
-    # # pre-filtering by SWAF / Swegen_count
-    # swaf=as.data.table(info(vcf)$SWAF)
-    # remove_swaf=unique(swaf$group[which(swaf$value>=0.01)])
-    # in_ref=snptable[names(vcf)]
-    # remove_swegen=which(in_ref$value>=10)
-    # vcf=vcf[-union(remove_swaf,remove_swegen)]
+ 
+#     # pre-filtering by SWAF / Swegen_count to avoid extreme nummber of variants
+#     if (project=='BTB') {
+#       swaf=as.data.table(info(vcf)$SWAF)
+#       remove_swaf=unique(swaf$group[which(swaf$value>=0.01)])
+#       in_ref=snptable[names(vcf)]
+#       remove_swegen=which(in_ref$value>=10)
+#       vcf=vcf[-union(remove_swaf,remove_swegen)]
+#       topmed=as.data.table(info(vcf)$TOPMED)
+#       vcf=vcf[-which(topmed$value>=0.01)]
+#     } else {
+#       in_ref=snptable[names(vcf)]
+#       remove_swegen=which(in_ref$value>=10)
+#       vcf=vcf[-remove_swegen]
+#     }
 
     #m2vcf <- vcf # for later export
 
@@ -1536,6 +1559,9 @@ if (exists('mutect2_file')) if (length(mutect2_file)>0) {
 
       ## Annotate by cosmic (for possibly retaining non PASS hotspots, which is not necessary smart)
       key=paste0(substr(mutations$chr,4,6),':',mutations$start,'-',mutations$end)
+      key=str_replace(key,'X:','23:')
+      key=str_replace(key,'Y:','24:')
+      
       counts=cbind(cosmic_coding[key,value],cosmic_noncoding[key,value],0)
       max_=apply(counts,1,max,na.rm=T)
       mutations$Cosmic_count=max_
@@ -1589,6 +1615,18 @@ if (exists('mutect2_file')) if (length(mutect2_file)>0) {
     }
   } # done collecting from vcf files
 
+  
+  # filtering by SWAF / Swegen_count (same as with Haplotypecaller)
+  if (project=='BTB') {
+    mutect2_table=mutect2_table[-which(mutect2_table$SWAF>=0.01)]
+    mutect2_table=mutect2_table[-which(mutect2_table$Swegen_count>=10)]
+    mutect2_table=mutect2_table[-which(mutect2_table$TOPMED>=0.01)]
+  } else {
+    mutect2_table=mutect2_table[-which(mutect2_table$Swegen_count>=10)]
+  }
+
+  
+  
   mutect2_table$cumstart=NA
   mutect2_table$cumend=NA
   # # for each chr get cumulative pos
@@ -1677,11 +1715,27 @@ if (exists('mutect2_file')) if (length(mutect2_file)>0) {
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'cosmic_>5')
     }
     
-    # Add TF binding variants
+    # Special case for TERT promoter
+    ix=which(selection$SYMBOL=='TERT' & selection$Consequence=='5_prime_UTR_variant')
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TERT_5\'UTR')
+    }
+
+    # Add TF binding variants near (100kb) cancer genes
     ix=grep('TF',selection$Consequence)
     if (length(ix)>0) {
       selection$rank_score[ix]=selection$rank_score[ix]+2
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TFBS')
+      for (i in 1:length(ix)) {
+        near=which(selection$cumend[ix[i]] > (tumorgenes$cumstart-100e3) & selection$cumstart[ix[i]] < (tumorgenes$cumend + 100e3) &
+                     !selection$SYMBOL[ix[i]] %in% alltumorgenes)
+        if (length(near)>0) {
+          genes=paste(tumorgenes$`Gene Symbol`[near],collapse = ',')
+          selection$rank_score[ix[i]]=selection$rank_score[ix[i]]+2
+          selection$rank_terms[ix[i]]=paste(selection$rank_terms[ix[i]],paste0('near_',genes))
+        }
+      }
     }
 
     ix=which(selection$CANONICAL!='YES')
@@ -1692,23 +1746,21 @@ if (exists('mutect2_file')) if (length(mutect2_file)>0) {
 
   }
 
-  mutect2_selected <- selection[order(cumstart,Allele)][order(rank_score,decreasing = T)]
+  firstcols=c('ID','sample','SYMBOL','rank_score','rank_terms','LOH','AFreq','Consequence','IMPACT','SWAF','TOPMED','Swegen_count')
+  cols=colnames(selection)
+  setcolorder(x = selection,neworder = c(firstcols,cols[!cols %in% firstcols]))
+  selection <- selection[order(cumstart,Allele)][order(rank_score,decreasing = T)]
+  
+  # # Take some information to the VCF
+  # selected_for_vcf=selection[, .(LOH=LOH,Swegen_count=Swegen_count,rank_terms=paste0(rank_score,':',SYMBOL,' ',trimws(rank_terms)),rank_score=rank_score), by = ID]
+  # selected_for_vcf=selected_for_vcf[, .(LOH=LOH,Swegen_count=Swegen_count,rank_terms=paste(unique(rank_terms),collapse=','),rank_score=paste(unique(rank_score),collapse=',')), by=ID]
+  # selected_for_vcf$rank_terms[selected_for_vcf$rank_score=='0']=''
+  # 
+  
+  mutect2_selected <- selection
+  
   if (write_tables) fwrite(mutect2_selected,file=paste0(sampleData$name,'_mutect2_tumor.csv'))
 
-
-  # # Show the overlap
-  # temp=unique(mutect2_selected[rank_score>0,.(ID,sample)])
-  # setkey(temp,'sample')
-  # names=sort(unique(temp$sample))
-  # nsamples=length(names)
-  # table=matrix(NA,ncol=nsamples,nrow=nsamples,
-  #              dimnames=list(`Variants in`=names,
-  #                            `Also in`=names))
-  # for (i in 1:nsamples) for (j in 1:nsamples) {
-  #   s=sum(temp[names[i],ID] %in% temp[names[j],ID])
-  #   table[i,j]=s
-  # }
-  # htmlTable(table,caption="Concordance of variants scored >0")
 
   tableWrapper(mutect2_selected[,-c('cumstart','cumend','DOMAINS')][rank_score>0])
 }
@@ -1891,6 +1943,17 @@ if (length(strelka_snv_file)>0  & length(strelka_indel_file)>0) {
   d$max=apply(X = d,MARGIN = 1,FUN = max,na.rm=T)
   strelka_table$Swegen_count=d$max
 
+  
+  # filtering by SWAF / Swegen_count (same as with Haplotypecaller)
+  if (project=='BTB') {
+    strelka_table=strelka_table[-which(strelka_table$SWAF>=0.01)]
+    strelka_table=strelka_table[-which(strelka_table$Swegen_count>=10)]
+    strelka_table=strelka_table[-which(strelka_table$TOPMED>=0.01)]
+  } else {
+    strelka_table=strelka_table[-which(strelka_table$Swegen_count>=10)]
+  }
+  
+  
   # # Add Cosmic counts
   # my_ranges=GRanges(seqnames = strelka_table$chr,
   #                   ranges = IRanges(as.numeric(strelka_table$start),as.numeric(strelka_table$end)))
@@ -1899,6 +1962,8 @@ if (length(strelka_snv_file)>0  & length(strelka_indel_file)>0) {
   # strelka_table$Cosmic_count[is.na(strelka_table$Cosmic_count)]=''
   key=paste0(substr(strelka_table$chr,4,6),':',strelka_table$start,'-',strelka_table$end)
   if (project!='BTB') key=paste0(strelka_table$chr,':',strelka_table$start,'-',strelka_table$end)
+  key=str_replace(key,'X:','23:')
+  key=str_replace(key,'Y:','24:')
   counts=cbind(cosmic_coding[key,value],cosmic_noncoding[key,value],0)
   max_=apply(counts,1,max,na.rm=T)
   strelka_table$Cosmic_count=max_
@@ -1989,11 +2054,27 @@ if (length(strelka_snv_file)>0  & length(strelka_indel_file)>0) {
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'cosmic_>5')
     }
 
-    # Add TF binding variants
+    # Special case for TERT promoter
+    ix=which(selection$SYMBOL=='TERT' & selection$Consequence=='5_prime_UTR_variant')
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TERT_5\'UTR')
+    }
+
+    # Add TF binding variants near (100kb) cancer genes
     ix=grep('TF',selection$Consequence)
     if (length(ix)>0) {
       selection$rank_score[ix]=selection$rank_score[ix]+2
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TFBS')
+      for (i in 1:length(ix)) {
+        near=which(selection$cumend[ix[i]] > (tumorgenes$cumstart-100e3) & selection$cumstart[ix[i]] < (tumorgenes$cumend + 100e3) &
+                     !selection$SYMBOL[ix[i]] %in% alltumorgenes)
+        if (length(near)>0) {
+          genes=paste(tumorgenes$`Gene Symbol`[near],collapse = ',')
+          selection$rank_score[ix[i]]=selection$rank_score[ix[i]]+2
+          selection$rank_terms[ix[i]]=paste(selection$rank_terms[ix[i]],paste0('near_',genes))
+        }
+      }
     }
     
     ix=which(selection$CANONICAL!='YES')
@@ -2004,6 +2085,10 @@ if (length(strelka_snv_file)>0  & length(strelka_indel_file)>0) {
 
   }
 
+  firstcols=c('ID','sample','SYMBOL','rank_score','rank_terms','LOH','AFreq','Consequence','IMPACT','SWAF','TOPMED','Swegen_count')
+  cols=colnames(selection)
+  setcolorder(x = selection,neworder = c(firstcols,cols[!cols %in% firstcols]))
+  
   strelka_selected <- selection[order(cumstart,Allele)][order(rank_score,decreasing = T)]
   if (write_tables) fwrite(strelka_selected,file=paste0(sampleData$name,'_strelka_tumor.csv'))
   tableWrapper(strelka_selected[,-c('cumstart','cumend','DOMAINS')][rank_score>0])
@@ -2042,13 +2127,16 @@ if (exists('mutect2_table')) for (sample in sort(unique(mutect2_table$sample))) 
 
   # Mutect2 plot
   cat('Mutect2: ',sample)
-  temp=unique(mutect2_table[sample][,.(cumstart,reads,AFreq,type,SYMBOL,Protein_position,Amino_acids)])
+  temp=unique(mutect2_table[sample][,.(cumstart,reads,AFreq,type,SYMBOL,Protein_position,Amino_acids,IMPACT)])
   g_mutect2=g_basic+
     xlab(paste('Mutect2: ',sample))+
     geom_point(data = temp,mapping = aes(x=cumstart,y=AFreq,fill=type,shape=type,col=reads),alpha=1)+
-    geom_label_repel(data = temp[SYMBOL %in% alltumorgenes & Amino_acids!='',],
+    geom_label_repel(data = temp[SYMBOL %in% alltier1 & IMPACT %in% c('MODERATE','HIGH'),],
                      mapping = aes(x=cumstart,y=AFreq,label=paste(SYMBOL,Protein_position,Amino_acids)),
-                     inherit.aes = F,size=3,nudge_y = 0.2)
+                     inherit.aes = F,size=3,nudge_y = 0.2,col='black')+
+    geom_label_repel(data = temp[SYMBOL %in% alltier2 & IMPACT %in% c('MODERATE','HIGH'),],
+                     mapping = aes(x=cumstart,y=AFreq,label=paste(SYMBOL,Protein_position,Amino_acids)),
+                     inherit.aes = F,size=3,nudge_y = 0.2,col='grey')
   print(g_mutect2)
 
 }
@@ -2082,13 +2170,16 @@ if (exists('strelka_table')) for (sample in sort(unique(strelka_table$sample))) 
 
   # Strelka plot
   cat('Strelka: ',sample)
-  temp=unique(strelka_table[sample][,.(cumstart,reads,AFreq,type,SYMBOL,Protein_position,Amino_acids)])
+  temp=unique(strelka_table[sample][,.(cumstart,reads,AFreq,type,SYMBOL,Protein_position,Amino_acids,IMPACT)])
   g_strelka=g_basic+
     xlab(paste('Strelka: ',sample))+
     geom_point(data = temp,mapping = aes(x=cumstart,y=AFreq,fill=type,shape=type,col=reads),alpha=1)+
-    geom_label_repel(data = temp[SYMBOL %in% alltumorgenes & Amino_acids!='',],
+    geom_label_repel(data = temp[SYMBOL %in% alltier1 & IMPACT %in% c('MODERATE','HIGH'),],
                      mapping = aes(x=cumstart,y=AFreq,label=paste(SYMBOL,Protein_position,Amino_acids)),
-                     inherit.aes = F,size=3,nudge_y = 0.2)
+                     inherit.aes = F,size=3,nudge_y = 0.2,col='black')+
+    geom_label_repel(data = temp[SYMBOL %in% alltier2 & IMPACT %in% c('MODERATE','HIGH'),],
+                     mapping = aes(x=cumstart,y=AFreq,label=paste(SYMBOL,Protein_position,Amino_acids)),
+                     inherit.aes = F,size=3,nudge_y = 0.2,col='grey')
   print(g_strelka)
 }
 ```
@@ -2132,15 +2223,16 @@ if (exists('haplotypecaller_N_file')) {
     sample=strsplit(basename(haplotypecaller_files[s]),'[.]')[[1]][1]
     haplotypecaller_ids[[sample]]=names(vcf)
     
-    # pre-filtering by SWAF / Swegen_count to avoid extreme nummber of variants
+    if (s>1) # if not the normal, keep only IDs already present (the normal is first)
+      vcf=vcf[names(vcf) %in% haplotypecaller_table$ID]
+    
+    # pre-filtering by SWAF / TOPMED to avoid extreme number of variants
     if (project=='BTB') {
       swaf=as.data.table(info(vcf)$SWAF)
-      remove_swaf=unique(swaf$group[which(swaf$value>=0.01)])
-      in_ref=snptable[names(vcf)]
-      remove_swegen=which(in_ref$value>=10)
-      vcf=vcf[-union(remove_swaf,remove_swegen)]
+      keep_swaf=unique(swaf$group[which(swaf$value<0.01)])
       topmed=as.data.table(info(vcf)$TOPMED)
-      vcf=vcf[-which(topmed$value>=0.01)]
+      keep_topmed=unique(topmed$group[which(topmed$value<0.01)])
+      vcf=vcf[union(keep_swaf,keep_topmed)]
     } else {
       in_ref=snptable[names(vcf)]
       remove_swegen=which(in_ref$value>=10)
@@ -2171,7 +2263,7 @@ if (exists('haplotypecaller_N_file')) {
     mutations$type[mutations$type=='G>C']='C>G'
     mutations$type[mutations$type=='G>A']='C>T'
     
-    mutations$AFreq=round(sapply(g$AD, "[[", 2) / unlist(g$DP),2) # not a great estimate...
+    mutations$AFreq=round(sapply(g$AD, "[[", 2) / unlist(g$DP),2) # not a perfect estimate...
     ad=as.data.table(g$AD)
     colnames(ad)='AD'
     mutations=cbind(mutations,ad)
@@ -2222,6 +2314,9 @@ if (exists('haplotypecaller_N_file')) {
     
     ## Annotate by cosmic (for possibly retaining non PASS hotspots, which is not necessarily smart)
     key=paste0(substr(mutations$chr,4,6),':',mutations$start,'-',mutations$end)
+    key=str_replace(key,'X:','23:')
+    key=str_replace(key,'Y:','24:')
+    
     if (project!='BTB') key=paste0(mutations$chr,':',mutations$start,'-',mutations$end)
     counts=cbind(cosmic_coding[key,value],cosmic_noncoding[key,value],0)
     max_=apply(counts,1,max,na.rm=T)
@@ -2352,11 +2447,27 @@ if (exists('haplotypecaller_N_file')) {
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'cosmic_>5')
     }
     
-    # Add TF binding variants
+    # Special case for TERT promoter
+    ix=which(selection$SYMBOL=='TERT' & selection$Consequence=='5_prime_UTR_variant')
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TERT_5\'UTR')
+    }
+
+    # Add TF binding variants near (100kb) cancer genes
     ix=grep('TF',selection$Consequence)
     if (length(ix)>0) {
       selection$rank_score[ix]=selection$rank_score[ix]+2
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TFBS')
+      for (i in 1:length(ix)) {
+        near=which(selection$cumend[ix[i]] > (tumorgenes$cumstart-100e3) & selection$cumstart[ix[i]] < (tumorgenes$cumend + 100e3) &
+                     !selection$SYMBOL[ix[i]] %in% alltumorgenes)
+        if (length(near)>0) {
+          genes=paste(tumorgenes$`Gene Symbol`[near],collapse = ',')
+          selection$rank_score[ix[i]]=selection$rank_score[ix[i]]+2
+          selection$rank_terms[ix[i]]=paste(selection$rank_terms[ix[i]],paste0('near_',genes))
+        }
+      }
     }
     
     ix=which(selection$CANONICAL!='YES')
@@ -2366,6 +2477,9 @@ if (exists('haplotypecaller_N_file')) {
     }
   }
   
+  firstcols=c('ID','sample','SYMBOL','rank_score','rank_terms','LOH','AFreq','Consequence','IMPACT','SWAF','TOPMED','Swegen_count')
+  cols=colnames(selection)
+  setcolorder(x = selection,neworder = c(firstcols,cols[!cols %in% firstcols]))
   
   haplotypecaller_selected <- selection[order(cumstart,Allele)][order(rank_score,decreasing = T)]
   if (write_tables) fwrite(haplotypecaller_selected,file=paste0(sampleData$name,'_haplotypecaller.csv'))
@@ -2689,17 +2803,21 @@ chromplot=function(thischr) if (T) {
       
     ### TUMOR MUTATIONS
     samples=sort(unique(strelka_table$sample))
-    temp=unique(strelka_table[samples[s]][chr==thischr & type!='other',][,.(start,AFreq,type,Amino_acids,SYMBOL,Protein_position)])
+    temp=unique(strelka_table[samples[s]][chr==thischr & type!='other',][,.(start,AFreq,type,Amino_acids,SYMBOL,IMPACT,Protein_position)])
     if (nrow(temp)>0) {
       g=g+geom_point(aes(x=start,y=AFreq -0.5,fill=type,shape=type),data = temp,alpha=1)+
         scale_fill_manual(values = c("A>C"="#1B9E77","A>G"="#D95F02", "A>T"="#7570B3", "C>A"="#E7298A", "C>G"="#66A61E", "C>T"="#E6AB02", "del"="#A6761D", "ins"="#666666"))+
         scale_shape_manual(values=c("A>C"=21,"A>G"=21, "A>T"=21, "C>A"=21, "C>G"=21, "C>T"=21, "del"=24, "ins"=25))#+
 
       # with labels
-      g=g+geom_label_repel(data = temp[Amino_acids!='' & SYMBOL %in% alltumorgenes,],
+      g=g+geom_label_repel(data = temp[IMPACT %in% c('MODERATE','HIGH') & SYMBOL %in% alltier2,],
                            mapping = aes(x=start,y=AFreq -0.5,
                                          label=paste(SYMBOL,Protein_position,Amino_acids)),
-                           inherit.aes = F,size=3,min.segment.length = 0,nudge_y = 0.3)
+                           inherit.aes = F,size=3,min.segment.length = 0,nudge_y = 0.3,col='grey')
+      g=g+geom_label_repel(data = temp[IMPACT %in% c('MODERATE','HIGH') & SYMBOL %in% alltier1,],
+                           mapping = aes(x=start,y=AFreq -0.5,
+                                         label=paste(SYMBOL,Protein_position,Amino_acids)),
+                           inherit.aes = F,size=3,min.segment.length = 0,nudge_y = 0.3,col='black')
     }
 
     ### SNPS
