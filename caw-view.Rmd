@@ -136,7 +136,7 @@ if (project == 'BTB') {
   files <- dir(recursive = T,full.names = T)
 
   remove=unique(c(grep(pattern = '.png',x = files),
-                  grep(pattern = 'ControlFreec',x = files),
+                  #grep(pattern = 'ControlFreec',x = files),
                   grep(pattern = 'Annotation.old',x = files),
                   grep(pattern = '/work/',x = files)))
   
@@ -208,11 +208,11 @@ library(htmlTable)
 library(kableExtra)
 library(stringr)
 
-
-info_header_add=data.frame(Number=1,
-                           Type=c('Integer','String','Integer','String'),
-                           Description=c('Swegen observations','Concomitant loss of heterozygosity','Pathfindr rank score', 'Pathfindr rank terms'),
-                           row.names = c('Swegen_count','LOH','Rank_score','Rank_terms'))
+# this is in preparation for VCF file output:
+# info_header_add=data.frame(Number=1,
+#                            Type=c('Integer','String','Integer','String'),
+#                            Description=c('Swegen observations','Concomitant loss of heterozygosity','Pathfindr rank score', 'Pathfindr rank terms'),
+#                            row.names = c('Swegen_count','LOH','Rank_score','Rank_terms'))
 
 
 makelinks <- function(strings,sep='&') {
@@ -1616,14 +1616,14 @@ if (exists('mutect2_file')) if (length(mutect2_file)>0) {
   } # done collecting from vcf files
 
   
-  # filtering by SWAF / Swegen_count (same as with Haplotypecaller)
-  if (project=='BTB') {
-    mutect2_table=mutect2_table[-which(mutect2_table$SWAF>=0.01)]
-    mutect2_table=mutect2_table[-which(mutect2_table$Swegen_count>=10)]
-    mutect2_table=mutect2_table[-which(mutect2_table$TOPMED>=0.01)]
-  } else {
-    mutect2_table=mutect2_table[-which(mutect2_table$Swegen_count>=10)]
-  }
+  # # filtering by SWAF / Swegen_count (same as with Haplotypecaller)
+  # if (project=='BTB') {
+  #   mutect2_table=mutect2_table[-which(mutect2_table$SWAF>=0.01)]
+  #   mutect2_table=mutect2_table[-which(mutect2_table$Swegen_count>=10)]
+  #   mutect2_table=mutect2_table[-which(mutect2_table$TOPMED>=0.01)]
+  # } else {
+  #   mutect2_table=mutect2_table[-which(mutect2_table$Swegen_count>=10)]
+  # }
 
   
   
@@ -1944,14 +1944,14 @@ if (length(strelka_snv_file)>0  & length(strelka_indel_file)>0) {
   strelka_table$Swegen_count=d$max
 
   
-  # filtering by SWAF / Swegen_count (same as with Haplotypecaller)
-  if (project=='BTB') {
-    strelka_table=strelka_table[-which(strelka_table$SWAF>=0.01)]
-    strelka_table=strelka_table[-which(strelka_table$Swegen_count>=10)]
-    strelka_table=strelka_table[-which(strelka_table$TOPMED>=0.01)]
-  } else {
-    strelka_table=strelka_table[-which(strelka_table$Swegen_count>=10)]
-  }
+  # # filtering by SWAF / Swegen_count (same as with Haplotypecaller)
+  # if (project=='BTB') {
+  #   strelka_table=strelka_table[-which(strelka_table$SWAF>=0.01)]
+  #   strelka_table=strelka_table[-which(strelka_table$Swegen_count>=10)]
+  #   strelka_table=strelka_table[-which(strelka_table$TOPMED>=0.01)]
+  # } else {
+  #   strelka_table=strelka_table[-which(strelka_table$Swegen_count>=10)]
+  # }
   
   
   # # Add Cosmic counts
@@ -2663,7 +2663,7 @@ try( {
 ### Save to files
 ```{r save_to_files}
 #export bed file of all relevant genomic regions
-if (F) if (write_tables) try({
+if (T) if (write_tables) try({
   x = unique(rbind(
       manta_tumor_table[,.(chr,start,end=start)],
       manta_tumor_table[,.(chr,start=end,end)],
