@@ -747,7 +747,7 @@ if (exists('binned')) for (sample in unique(binned$sample)) {
   cat('Control Freec: ',sample)
   binned$tmaf[binned$tmaf<0]=1
   g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.3,3))+
-    geom_point(aes(x = tratio,y = tmaf,col=chr,shape=chr),data=binned[sample][tratio<3])+
+    geom_point(aes(x = tratio,y = tmaf,col=chr),data=binned[sample][tratio<3])+
     xlab('Tumor (1Mb mean) DNA ratio')+ylab('Tumor (1Mb mean) major allele ratio')+
     scale_y_continuous(breaks = seq(0.5,1,0.1)) +
     scale_x_continuous(breaks = seq(0.5,2.5,0.1))+
@@ -812,7 +812,7 @@ if (exists('ascat_tratio')) for (sample in unique(ascat_tratio$sample)) {
 if (exists('ascat_binned')) for (sample in unique(ascat_binned$sample)) {
   cat('ASCAT: ',sample)
   g=ggplot()+expand_limits(y=c(.5,1))+expand_limits(x=c(.3,3))+
-    geom_point(aes(x = tratio,y = tmaf,col=chr,shape=chr),data=ascat_binned[sample][tratio<3])+
+    geom_point(aes(x = tratio,y = tmaf,col=chr),data=ascat_binned[sample][tratio<3])+
     xlab('Tumor (1Mb mean) DNA ratio')+ylab('Tumor (1Mb mean) major allele ratio')+
     scale_y_continuous(breaks = seq(0.5,1,0.1)) +
     scale_x_continuous(breaks = seq(0.5,2.5,0.1))+
