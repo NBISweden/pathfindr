@@ -2223,16 +2223,17 @@ if (exists('haplotypecaller_N_file')) {
     sample=strsplit(basename(haplotypecaller_files[s]),'[.]')[[1]][1]
     haplotypecaller_ids[[sample]]=names(vcf)
     
-    if (s>1) # if not the normal, keep only IDs already present (the normal is first)
+    if (s>1) # if not the normal, keep only IDs already present (the normal is first)  <--- this is why somatic variants are not shown
       vcf=vcf[names(vcf) %in% haplotypecaller_table$ID]
     
     # pre-filtering by SWAF / TOPMED to avoid extreme number of variants
     if (project=='BTB') {
       swaf=as.data.table(info(vcf)$SWAF)
-      keep_swaf=unique(swaf$group[which(swaf$value<0.01)])
       topmed=as.data.table(info(vcf)$TOPMED)
-      keep_topmed=unique(topmed$group[which(topmed$value<0.01)])
-      vcf=vcf[union(keep_swaf,keep_topmed)]
+      values=data.table(swaf$value,topmed$value,0) # where both are NA, 0 will be kept as AF
+      values$max=apply(values, 1, max, na.rm=T)
+      keep=unique(swaf$group[which(values$max<0.01)])  # variant IXs with some allele <1% in SWAF and TOPMED (swaf$group equals topmed$group)
+      vcf=vcf[keep]                 
     } else {
       in_ref=snptable[names(vcf)]
       remove_swegen=which(in_ref$value>=10)
