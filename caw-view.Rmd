@@ -1086,8 +1086,8 @@ if (!is.null(manta_tumor_table)) if (nrow(manta_tumor_table)>0) {
     setcolorder(x = selection,neworder = c(firstcols,cols[!cols %in% firstcols]))
     
     manta_tumor_selected <- selection[order(Feature_ID)][order(rank_score,decreasing = T)]
-    if (write_tables) fwrite(manta_tumor_selected[,-c('ANN','Gene_ID')][rank_score>1],file=paste0(sampleData$name,'_manta_tumor.csv'))
-    tableWrapper(manta_tumor_selected[,-c('ANN','Gene_ID')][rank_score>1])
+    if (write_tables) fwrite(manta_tumor_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>1],file=paste0(sampleData$name,'_manta_tumor.csv'))
+    tableWrapper(manta_tumor_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>1])
   } 
 }
 
@@ -1363,8 +1363,8 @@ if (project=='BTB') {
       
       
       manta_normal_selected <- selection[order(Feature_ID)][order(rank_score,decreasing = T)]
-      if (write_tables) fwrite(manta_normal_selected[,-c('ANN','Gene_ID')][rank_score>1],file=paste0(sampleData$name,'_manta_normal.csv'))
-      tableWrapper(manta_normal_selected[,-c('ANN','Gene_ID')][rank_score>1])
+      if (write_tables) fwrite(manta_normal_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>1],file=paste0(sampleData$name,'_manta_normal.csv'))
+      tableWrapper(manta_normal_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>1])
     } 
   }
 }
@@ -2232,7 +2232,7 @@ if (exists('haplotypecaller_N_file')) {
       topmed=as.data.table(info(vcf)$TOPMED)
       values=data.table(swaf$value,topmed$value,0) # where both are NA, 0 will be kept as AF
       values$max=apply(values, 1, max, na.rm=T)
-      keep=unique(swaf$group[which(values$max<0.01)])  # variant IXs with some allele <1% in SWAF and TOPMED (swaf$group equals topmed$group)
+      keep=unique(swaf$group[which(values$max<0.01)])  # variant IXs with all alleles <1% in SWAF and TOPMED (swaf$group equals topmed$group)
       vcf=vcf[keep]                 
     } else {
       in_ref=snptable[names(vcf)]
