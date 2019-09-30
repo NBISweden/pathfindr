@@ -66,6 +66,7 @@ if (project=='BTB' | project=='CLL') write_tables=T else write_tables=F
 
 
 if (project == 'CLL') {
+  table_dir=''
   name=basename(getwd())
   path=paste0('/castor/project/proj/WGS2018Work/WGS_Subsets/',name,'/results')
   # Ascat files
@@ -85,6 +86,7 @@ if (project == 'CLL') {
 
 if (project == 'AML-a') {
   name=basename(getwd())
+  table_dir=''
   # Ascat files
   ascat_Tratio_file <- dir(path='~/results/VariantCalling/Ascat/',pattern=paste0('.*',name,'-[DR].*LogR$'),recursive = T,full.names = T)
   ascat_Tbaf_file <- dir(path='~/results/VariantCalling/Ascat/',pattern=paste0('.*',name,'-[DR].*BAF$'),recursive = T,full.names = T)
@@ -109,6 +111,7 @@ if (project == 'AML-a') {
 
 
 if (project == 'AML-p') {
+  table_dir=''
   files <- dir(recursive = T,full.names = T)
 
   files <- files[-grep(pattern = '.png',x = files)]
@@ -133,50 +136,58 @@ if (project == 'AML-p') {
 }
 
 if (project == 'BTB') {
+  csv_dir='~/tables'
   files <- dir(recursive = T,full.names = T)
 
   remove=unique(c(grep(pattern = '.png',x = files),
                   #grep(pattern = 'ControlFreec',x = files),
                   grep(pattern = 'Annotation.old',x = files),
-                  grep(pattern = '/work/',x = files)))
+                  grep(pattern = '/work/',x = files),
+                  grep(pattern = 'VEP.CADD/Manta',x = files),
+                  grep(pattern = 'VEP/haplo',x = files),
+                  grep(pattern = 'VEP/mute',x = files),
+                  grep(pattern = 'VEP/Strelk',x = files),
+                  grep(pattern = 'old.ControlFreec',x = files),
+                  grep(pattern = 'old.BTB_ControlFreec',x = files)
+                ))
   
   if (length(remove)>0) files <- files[-remove]
   
   # control freec files
   freec_Tratio_file <- files[grep(pattern = '[TR].hg38.pileup.gz_ratio.txt',files,perl = T)]
-  freec_Nratio_file <- files[grep(pattern = '[TR].hg38.pileup.gz_normal_ratio.txt',files,perl = T)][1]
+  freec_Nratio_file <- files[grep(pattern = '[BNT].hg38.pileup.gz_normal_ratio.txt',files,perl = T)][1]
   freec_Tbaf_file <- files[grep(pattern = '[TR].hg38.pileup.gz_BAF.txt',files,perl = T)]
   freec_Nbaf_file <- files[grep(pattern = '[BN].hg38.pileup.gz_BAF.txt',files,perl = T)][1]
   freec_info_file <- files[grep(pattern = 'hg38.pileup.gz_info.txt',files,perl = T)]
   freec_cnv_file <- files[grep(pattern = "^.*[TR]\\.hg38\\.pileup\\.gz_CNVs$",files,perl = T)]
   # Ascat files
-  ascat_Tratio_file <- files[grep(pattern = "^.*Ascat.*[TR]\\.LogR$",files)]
-  ascat_Nratio_file <- files[grep(pattern = "^.*Ascat.*[BN]\\.LogR$",files)][1]
-  ascat_Tbaf_file <- files[grep(pattern = "^.*Ascat.*[TR]\\.BAF$",files)]
-  ascat_Nbaf_file <- files[grep(pattern = "^.*Ascat.*[BN]\\.BAF$",files)][1]
-  ascat_segment_file <- files[grep(pattern = "^.*Ascat.*[TR]\\.cnvs\\.txt$",files)]
+  ascat_Tratio_file <- files[grep(pattern = "^.*Ascat.*[TR2]\\.LogR$",files)]
+  ascat_Nratio_file <- files[grep(pattern = "^.*Ascat.*[BN1]\\.LogR$",files)][1]
+  ascat_Tbaf_file <- files[grep(pattern = "^.*Ascat.*[TR2]\\.BAF$",files)]
+  ascat_Nbaf_file <- files[grep(pattern = "^.*Ascat.*[BN1]\\.BAF$",files)][1]
+  ascat_segment_file <- files[grep(pattern = "^.*Ascat.*[TR2]\\.cnvs\\.txt$",files)]
   # ascat_Tratio_file <- files[grep(pattern = "^.*Ascat.*02\\.LogR$",files)]
   # ascat_Nratio_file <- files[grep(pattern = "^.*Ascat.*01\\.LogR$",files)]
   # ascat_Tbaf_file <- files[grep(pattern = "^.*Ascat.*02\\.BAF$",files)]
   # ascat_Nbaf_file <- files[grep(pattern = "^.*Ascat.*01\\.BAF$",files)]
   # ascat_segment_file <- files[grep(pattern = "^.*Ascat.*02\\.cnvs\\.txt$",files)]
   # Manta structural variant files
-  manta_tumor_file <- grep(pattern = ".*Manta_.*vs.*somaticSV.vcf.snpEff.ann.vcf$",files,value = T)
-  manta_normal_file <- grep(pattern = ".*Manta_.*vs.*diploidSV.vcf.snpEff.ann.vcf$",files,value = T)[1]
+  manta_tumor_file <- grep(pattern = ".*Eff/Manta_.*vs.*somaticSV.vcf.snpEff.ann.vcf$",files,value = T)
+  manta_normal_file <- grep(pattern = ".*Eff/Manta_.*vs.*diploidSV.vcf.snpEff.ann.vcf$",files,value = T)[1]
   # Haplotype caller variant files
-  haplotypecaller_T_file <- grep(pattern = ".*haplotypecaller.*[TR].*AF.*vep.ann.vcf$",files,value = T)
+  haplotypecaller_T_file <- grep(pattern = ".*CADD/haplotypecaller.*[TR2][.].*AF.*vep.ann.vcf$",files,value = T)
   # haplotypecaller_T_file <- 
   #   grep(pattern = "^.*Annotation/VEP/haplotypecaller.*02.*vcf$",files,value = T)[1]
-  haplotypecaller_N_file <- grep(pattern = ".*haplotypecaller.*[NB].*AF.*vep.ann.vcf$",files,value = T)
+  haplotypecaller_N_file <- grep(pattern = ".*CADD/haplotypecaller.*[NB1][.].*AF.*vep.ann.vcf$",files,value = T)
   # haplotypecaller_N_file <- 
   #   grep(pattern = "^.*Annotation/VEP/haplotypecaller.*01.*vcf$",files,value = T)[1]
   # snpEff+VEP Mutect2 file
   # mutect2_file <- grep(pattern = "^.*Annotation/VEP/mutect2_.*[TR]_vs_.*[BN]\\.vcf.*vcf$",files,value = T)[1]
-  mutect2_file <- grep(pattern = ".*mutect2_.*AF.*vep.ann.vcf$",files,value = T)
+  mutect2_file <- grep(pattern = ".*CADD/mutect2_.*AF.*vep.ann.vcf$",files,value = T)
   # snpEff + VEP Strelka snv file
-  strelka_snv_file <- grep(pattern = ".*Strelka_.*_somatic_snvs.*AF.*vep.ann.vcf$",files,value = T)
+  strelka_snv_file <- grep(pattern = ".*CADD/Strelka_.*_somatic_snvs.*AF.*vep.ann.vcf$",files,value = T)
   # snpEff + VEP Strelka indel file
-  strelka_indel_file <- grep(pattern = ".*Strelka_.*_somatic_indels.*AF.*vep.ann.vcf$",files,value = T)
+  strelka_indel_file <- grep(pattern = ".*CADD/Strelka_.*_somatic_indels.*AF.*vep.ann.vcf$",files,value = T)
 }
 
 
@@ -257,7 +268,7 @@ tableWrapper <- function(table) {
   
   samples=sort(unique(table$sample))
   
-  if (T) htmlTable(table, 
+  if (T) if (nrow(table)>0) htmlTable(table, 
             col.rgroup = c("none", "#F7F7F7"),
             tspanner=paste('Rank score:',unique(table$rank_score)),
             n.tspanner=rev(table(table$rank_score)))
@@ -524,7 +535,7 @@ if (project=='BTB') if (!is.na(freec_Tratio_file[1])) {
   }
   
   freec_cnv=cnvs[order(rank_score,decreasing = T)] # order by rank
-  if (write_tables) fwrite(freec_cnv,file=paste0(sampleData$name,'_freec_cnv.csv')) # write to file
+  if (write_tables) fwrite(freec_cnv,file=paste0(csv_dir,'/',sampleData$name,'_freec_cnv.csv')) # write to file
   
   tableWrapper(freec_cnv) # table in report
 }
@@ -685,7 +696,7 @@ if (length(ascat_Tratio_file)>0) {
   }
   
   ascat_cnv=cnvs[order(rank_score,decreasing = T)]
-  if (write_tables) fwrite(ascat_cnv,file=paste0(sampleData$name,'_ascat_cnv.csv'))
+  if (write_tables) fwrite(ascat_cnv,file=paste0(csv_dir,'/',sampleData$name,'_ascat_cnv.csv'))
 
   tableWrapper(ascat_cnv)
 }
@@ -834,13 +845,13 @@ if (exists('ascat_binned')) for (sample in unique(ascat_binned$sample)) {
 manta_tumor_table=NULL
 # first collect PASS ids from all samples
 allpass=NULL
-if (length(manta_tumor_file)>0) for (s in 1:length(manta_tumor_file)) {
+if (length(manta_tumor_file)>0) if (!is.na(manta_tumor_file)) for (s in 1:length(manta_tumor_file)) {
   vcf=readVcf(file = manta_tumor_file[s],genome = reference_genome)
   pass=rowRanges(vcf)$FILTER=='PASS'
   allpass=c(allpass,names(vcf)[pass])
 }
 # then collect variants...
-if (length(manta_tumor_file)>0) for (s in 1:length(manta_tumor_file)) {
+if (length(manta_tumor_file)>0) if (!is.na(manta_tumor_file)) for (s in 1:length(manta_tumor_file)) {
   sample=strsplit(basename(manta_tumor_file[s]),'[.]')[[1]][1]
   cat(manta_tumor_file[s],'\n')
   
@@ -1086,8 +1097,8 @@ if (!is.null(manta_tumor_table)) if (nrow(manta_tumor_table)>0) {
     setcolorder(x = selection,neworder = c(firstcols,cols[!cols %in% firstcols]))
     
     manta_tumor_selected <- selection[order(Feature_ID)][order(rank_score,decreasing = T)]
-    if (write_tables) fwrite(manta_tumor_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>1],file=paste0(sampleData$name,'_manta_tumor.csv'))
-    tableWrapper(manta_tumor_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>1])
+    if (write_tables) fwrite(manta_tumor_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>3],file=paste0(csv_dir,'/',sampleData$name,'_manta_tumor.csv'))
+    tableWrapper(manta_tumor_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>3])
   } 
 }
 
@@ -1102,13 +1113,13 @@ if (project=='BTB') {
   # first collect PASS ids from all samples
   allpass=NULL
   vcfs=list()
-  if (length(manta_normal_file)>0) for (s in 1:length(manta_normal_file)) {
+  if (length(manta_normal_file)>0) if (!is.na(manta_normal_file)) for (s in 1:length(manta_normal_file)) {
     vcfs[[manta_normal_file[s]]]=readVcf(file = manta_normal_file[s],genome = reference_genome)
     pass=rowRanges(vcfs[[manta_normal_file[s]]])$FILTER=='PASS'
     allpass=c(allpass,names(vcfs[[manta_normal_file[s]]])[pass])
   }
   # then collect variants...
-  if (length(manta_normal_file)>0) for (s in 1:length(manta_normal_file)) {
+  if (length(manta_normal_file)>0) if (!is.na(manta_normal_file)) for (s in 1:length(manta_normal_file)) {
     sample=strsplit(basename(manta_normal_file[s]),'[.]')[[1]][1]
     cat(manta_normal_file[s],'\n')
     
@@ -1363,8 +1374,8 @@ if (project=='BTB') {
       
       
       manta_normal_selected <- selection[order(Feature_ID)][order(rank_score,decreasing = T)]
-      if (write_tables) fwrite(manta_normal_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>1],file=paste0(sampleData$name,'_manta_normal.csv'))
-      tableWrapper(manta_normal_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>1])
+      if (write_tables) fwrite(manta_normal_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>3],file=paste0(csv_dir,'/',sampleData$name,'_manta_normal.csv'))
+      tableWrapper(manta_normal_selected[,-c('ANN','CSQ','Gene_ID')][rank_score>3])
     } 
   }
 }
@@ -1716,10 +1727,10 @@ if (exists('mutect2_file')) if (length(mutect2_file)>0) {
     }
     
     # Special case for TERT promoter
-    ix=which(selection$SYMBOL=='TERT' & selection$Consequence=='5_prime_UTR_variant')
+    ix=which(selection$SYMBOL=='TERT' & selection$Consequence %in% c('5_prime_UTR_variant','upstream_gene_variant'))
     if (length(ix)>0) {
-      selection$rank_score[ix]=selection$rank_score[ix]+2
-      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TERT_5\'UTR')
+      selection$rank_score[ix]=selection$rank_score[ix]+4
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TERT_upstr')
     }
 
     # Add TF binding variants near (100kb) cancer genes
@@ -1743,10 +1754,16 @@ if (exists('mutect2_file')) if (length(mutect2_file)>0) {
       selection$rank_score[ix]=selection$rank_score[ix]-0
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'not_canonical')
     }
+    
+    ix=which(as.numeric(selection$CADD_PHRED) > 30)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'cadd_>30')
+    }
 
   }
 
-  firstcols=c('ID','sample','SYMBOL','rank_score','rank_terms','LOH','AFreq','Consequence','IMPACT','SWAF','TOPMED','Swegen_count')
+  firstcols=c('ID','sample','SYMBOL','rank_score','rank_terms','LOH','AFreq','Consequence','IMPACT','CADD_PHRED','SWAF','TOPMED','Swegen_count')
   cols=colnames(selection)
   setcolorder(x = selection,neworder = c(firstcols,cols[!cols %in% firstcols]))
   selection <- selection[order(cumstart,Allele)][order(rank_score,decreasing = T)]
@@ -1759,10 +1776,10 @@ if (exists('mutect2_file')) if (length(mutect2_file)>0) {
   
   mutect2_selected <- selection
   
-  if (write_tables) fwrite(mutect2_selected,file=paste0(sampleData$name,'_mutect2_tumor.csv'))
+  if (write_tables) fwrite(mutect2_selected[rank_score>3],file=paste0(csv_dir,'/',sampleData$name,'_mutect2_tumor.csv'))
 
 
-  tableWrapper(mutect2_selected[,-c('cumstart','cumend','DOMAINS')][rank_score>0])
+  tableWrapper(mutect2_selected[,-c('cumstart','cumend','DOMAINS')][rank_score>3])
 }
 
 
@@ -2057,8 +2074,8 @@ if (length(strelka_snv_file)>0  & length(strelka_indel_file)>0) {
     # Special case for TERT promoter
     ix=which(selection$SYMBOL=='TERT' & selection$Consequence=='5_prime_UTR_variant')
     if (length(ix)>0) {
-      selection$rank_score[ix]=selection$rank_score[ix]+2
-      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TERT_5\'UTR')
+      selection$rank_score[ix]=selection$rank_score[ix]+4
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TERT_upstr')
     }
 
     # Add TF binding variants near (100kb) cancer genes
@@ -2082,16 +2099,22 @@ if (length(strelka_snv_file)>0  & length(strelka_indel_file)>0) {
       selection$rank_score[ix]=selection$rank_score[ix]-0
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'not_canonical')
     }
+    
+    ix=which(as.numeric(selection$CADD_PHRED) > 30)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'cadd_>30')
+    }
 
   }
 
-  firstcols=c('ID','sample','SYMBOL','rank_score','rank_terms','LOH','AFreq','Consequence','IMPACT','SWAF','TOPMED','Swegen_count')
+  firstcols=c('ID','sample','SYMBOL','rank_score','rank_terms','LOH','AFreq','Consequence','IMPACT','CADD_PHRED','SWAF','TOPMED','Swegen_count')
   cols=colnames(selection)
   setcolorder(x = selection,neworder = c(firstcols,cols[!cols %in% firstcols]))
   
   strelka_selected <- selection[order(cumstart,Allele)][order(rank_score,decreasing = T)]
-  if (write_tables) fwrite(strelka_selected,file=paste0(sampleData$name,'_strelka_tumor.csv'))
-  tableWrapper(strelka_selected[,-c('cumstart','cumend','DOMAINS')][rank_score>0])
+  if (write_tables) fwrite(strelka_selected[rank_score>3],file=paste0(csv_dir,'/',sampleData$name,'_strelka_tumor.csv'))
+  tableWrapper(strelka_selected[,-c('cumstart','cumend','DOMAINS')][rank_score>3])
 }
   
 
@@ -2223,8 +2246,8 @@ if (exists('haplotypecaller_N_file')) {
     sample=strsplit(basename(haplotypecaller_files[s]),'[.]')[[1]][1]
     haplotypecaller_ids[[sample]]=names(vcf)
     
-    if (s>1) # if not the normal, keep only IDs already present (the normal is first)  <--- this is why somatic variants are not shown
-      vcf=vcf[names(vcf) %in% haplotypecaller_table$ID]
+    # if (s>1) # if not the normal, keep only IDs already present (the normal is first)  <--- this is why somatic variants are not shown
+    #   vcf=vcf[names(vcf) %in% haplotypecaller_table$ID]
     
     # pre-filtering by SWAF / TOPMED to avoid extreme number of variants
     if (project=='BTB') {
@@ -2292,13 +2315,13 @@ if (exists('haplotypecaller_N_file')) {
     # Add Swegen counts
     mutations$Swegen_count=snptable[names(vcf),value]
     mutations$Swegen_count[is.na(mutations$Swegen_count)]=0
-    # Some have multiple rsIDs
-    ix=grep(';',mutations$ID)
-    ids=data.table(ix,id=strsplit(mutations$ID[ix],';'))
-    temp_snptable=snptable[name %in% unlist(ids$id)]
-    ids$counts=unlist(lapply(ids$id,function(x) return(max(temp_snptable[x,value],na.rm=T))))
-    ids$counts[is.infinite(ids$counts)]=0
-    mutations$Swegen_count[ix]=ids$counts
+    # # Some have multiple rsIDs
+    # ix=grep(';',mutations$ID)
+    # ids=data.table(ix,id=strsplit(mutations$ID[ix],';'))
+    # temp_snptable=snptable[name %in% unlist(ids$id)]
+    # ids$counts=unlist(lapply(ids$id,function(x) return(max(temp_snptable[x,value],na.rm=T))))
+    # ids$counts[is.infinite(ids$counts)]=0
+    # mutations$Swegen_count[ix]=ids$counts
     
     # Also double check Swegen in case pos in reference but rsID or not properly matched in data
     pos=paste0(mutations$chr,':',mutations$start,'_',mutations$ref,'/',mutations$alt)
@@ -2449,10 +2472,10 @@ if (exists('haplotypecaller_N_file')) {
     }
     
     # Special case for TERT promoter
-    ix=which(selection$SYMBOL=='TERT' & selection$Consequence=='5_prime_UTR_variant')
+    ix=which(selection$SYMBOL=='TERT' & selection$Consequence %in% c('5_prime_UTR_variant','upstream_gene_variant'))
     if (length(ix)>0) {
-      selection$rank_score[ix]=selection$rank_score[ix]+2
-      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TERT_5\'UTR')
+      selection$rank_score[ix]=selection$rank_score[ix]+4
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'TERT_upstr')
     }
 
     # Add TF binding variants near (100kb) cancer genes
@@ -2476,16 +2499,22 @@ if (exists('haplotypecaller_N_file')) {
       selection$rank_score[ix]=selection$rank_score[ix]-0
       selection$rank_terms[ix]=paste(selection$rank_terms[ix],'not_canonical')
     }
+    
+    ix=which(as.numeric(selection$CADD_PHRED) > 30)
+    if (length(ix)>0) {
+      selection$rank_score[ix]=selection$rank_score[ix]+2
+      selection$rank_terms[ix]=paste(selection$rank_terms[ix],'cadd_>30')
+    }
   }
   
-  firstcols=c('ID','sample','SYMBOL','rank_score','rank_terms','LOH','AFreq','Consequence','IMPACT','SWAF','TOPMED','Swegen_count')
+  firstcols=c('ID','sample','SYMBOL','rank_score','rank_terms','LOH','AFreq','Consequence','IMPACT','CADD_PHRED','SWAF','TOPMED','Swegen_count')
   cols=colnames(selection)
   setcolorder(x = selection,neworder = c(firstcols,cols[!cols %in% firstcols]))
   
   haplotypecaller_selected <- selection[order(cumstart,Allele)][order(rank_score,decreasing = T)]
-  if (write_tables) fwrite(haplotypecaller_selected,file=paste0(sampleData$name,'_haplotypecaller.csv'))
+  if (write_tables) fwrite(haplotypecaller_selected[rank_score>3],file=paste0(csv_dir,'/',sampleData$name,'_haplotypecaller.csv'))
   ix=haplotypecaller_selected$sample==strsplit(basename(haplotypecaller_files[1]),'[.]')[[1]][1] # first file is the normal
-  tableWrapper(haplotypecaller_selected[ix][,-c('cumstart','cumend','DOMAINS')][rank_score>1])
+  tableWrapper(haplotypecaller_selected[ix][,-c('cumstart','cumend','DOMAINS')][rank_score>3])
   
 }
 
@@ -2493,7 +2522,7 @@ if (exists('haplotypecaller_N_file')) {
 
 ### HaplotypeCaller (all samples)
 ```{r haplotypecaller_T+N, echo=FALSE}
-if (project=='BTB') tableWrapper(haplotypecaller_selected[,-c('cumstart','cumend','DOMAINS')][rank_score>1])
+if (project=='BTB') tableWrapper(haplotypecaller_selected[,-c('cumstart','cumend','DOMAINS')][rank_score>3])
 ```
 
 ### HaplotypeCaller overlap
@@ -2523,7 +2552,7 @@ if (exists('haplotypecaller_N_file')) {
 # each is just a subset (incl sample id) if the sorted "selected" variants.
 if (exists('mutect2_selected')) {
   cat('Mutect2')
-  t=mutect2_selected[rank_score>0]
+  t=mutect2_selected[rank_score>3]
   if (nrow(t)>0){
     t=data.table(Sample=t$sample,
                  Gene=t$SYMBOL,
@@ -2542,7 +2571,7 @@ if (exists('mutect2_selected')) {
 
 ```{r}
 cat('Strelka')
-t=strelka_selected[rank_score>0]
+t=strelka_selected[rank_score>3]
 if (nrow(t)>0){
   t=data.table(Sample=t$sample,
                Gene=t$SYMBOL,
@@ -2562,7 +2591,7 @@ if (nrow(t)>0){
 
 if (exists('haplotypecaller_selected')) {
   cat('HaplotypeCaller')
-  t=haplotypecaller_selected[rank_score>1]
+  t=haplotypecaller_selected[rank_score>3]
   if (nrow(t)>0){
     t=data.table(Sample=t$sample,
                  Gene=t$SYMBOL,
@@ -2582,7 +2611,7 @@ if (exists('haplotypecaller_selected')) {
 ```{r}
 cat('Manta somatic')
 try( {
-  t=manta_tumor_selected[rank_score>0]
+  t=manta_tumor_selected[rank_score>3]
   t$Gene_Name[nchar(t$Gene_Name)>100]='many'
   if (nrow(t)>0){
     t=unique(data.table(Sample=t$sample,
@@ -2603,7 +2632,7 @@ try( {
 ```{r}
 cat('Manta germline')
 if (exists('manta_normal_selected')) try({
-  t=manta_normal_selected[rank_score>1]
+  t=manta_normal_selected[rank_score>3]
   t$Gene_Name[nchar(t$Gene_Name)>100]='many'
   if (nrow(t)>0){
     t=unique(data.table(Sample=t$sample,
@@ -2664,7 +2693,7 @@ try( {
 ### Save to files
 ```{r save_to_files}
 #export bed file of all relevant genomic regions
-if (T) if (write_tables) try({
+if (F) if (write_tables) try({
   x = unique(rbind(
       manta_tumor_table[,.(chr,start,end=start)],
       manta_tumor_table[,.(chr,start=end,end)],
@@ -2677,15 +2706,15 @@ if (T) if (write_tables) try({
       haplotypecaller_table[,.(chr,start,end)])
     )
   #x[,1]=paste0('chr',x[,1])
-  #save(x,file =  paste0(sampleData$name,'_forBamfile.Rdata'))
+  #save(x,file =  paste0(csv_dir,'/',sampleData$name,'_forBamfile.Rdata'))
   write.table(
     x,
-    file = paste0(sampleData$name,'_forBamfile.bed'
+    file = paste0(csv_dir,'/',sampleData$name,'_forBamfile.bed'
     ),
     sep = '\t',row.names = F,col.names = F,quote=F)
 }, silent=T)
 
-save.image(paste0(sampleData$name,'_ws.Rdata'))
+save.image(paste0(csv_dir,'/',sampleData$name,'_ws.Rdata'))
 
 ```
 
